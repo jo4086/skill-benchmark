@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "workspace": {
+    "id": "codex-workspace",
+    "repository": "https://github.com/jo4086/codex-workspace.git",
+    "commit": "060539e6ccc727899aaaab9278929b2e2ca29d23",
+    "skillsPath": "skills"
+  },
+  "public": [
+    {
+      "id": "superpowers",
+      "repository": "https://github.com/obra/superpowers.git",
+      "commit": "22f0b463e7a5e579904dd6211a520321035526f7",
+      "skillsPath": "skills"
+    },
+    {
+      "id": "anthropics-skills",
+      "repository": "https://github.com/anthropics/skills.git",
+      "commit": "e4bb5d960d87126ff3b3a8af1a104b7db67560ba",
+      "skillsPath": "skills"
+    },
+    {
+      "id": "mattpocock-skills",
+      "repository": "https://github.com/mattpocock/skills.git",
+      "commit": "abeeaf95660ba9e8b7c753eb38f441ca707a8823",
+      "skillsPath": "skills"
+    }
+  ]
+}

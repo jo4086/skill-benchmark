@@ -1,0 +1,3 @@
+# Promptfoo suites are assembled from saved run.json files by evaluators/compare.mjs.
+# Use `pnpm run compare -- --runs ...` or run Runner with two or more environments.
+# A static suite would not preserve the selected runs and their input hashes.

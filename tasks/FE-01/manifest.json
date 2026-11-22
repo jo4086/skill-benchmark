@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "FE-01",
+  "name": "REST Countries API with color theme switcher",
+  "domain": "frontend",
+  "difficulty": null,
+  "techSpec": "frontend",
+  "prompt": "task.md",
+  "source": {
+    "kind": "zip",
+    "url": "https://www.frontendmentor.io/challenges",
+    "archive": "source/rest-countries-api-with-color-theme-switcher-master.zip",
+    "sha256": "9e7ba43d5d9894db33a0bc16ed5a49aebaeeaf0da8c3fffdaa6eb9f986b8583e",
+    "root": "rest-countries-api-with-color-theme-switcher-master"
+  },
+  "input": {
+    "kind": "zip-files",
+    "files": ["data.json", "style-guide.md", "preview.jpg"],
+    "directories": ["design"]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node bootstrap/setup.mjs",
+    "auth:copy": "node bootstrap/auth.mjs",
+    "verify": "node bootstrap/verify.mjs",
+    "runner": "node runner/index.mjs",
+    "restore": "node runner/storage.mjs restore",
+    "compare": "node evaluators/compare.mjs",
+    "evaluate": "node evaluators/evaluate.mjs",
+    "tasks": "node tasks/index.mjs",
+    "test:tasks": "node --test tasks/tasks.test.mjs",
+    "test:runner": "node --test runner/*.test.mjs",
+    "test:evaluators": "node --test evaluators/*.test.mjs",
+    "test:bootstrap": "node --test bootstrap/bootstrap.test.mjs",
+    "test:baseline": "bash scripts/test-isolation.sh baseline",
+    "test:mine": "bash scripts/test-isolation.sh codex-workspace",
+    "test:public": "bash scripts/test-isolation.sh public"
+  },
+  "devDependencies": {
+    "@openai/codex-sdk": "0.167.0",
+    "eslint": "9.39.5",
+    "playwright": "^1.65.1",
+    "promptfoo": "0.126.0",
+    "typescript-eslint": "8.56.0"
+  }
+}

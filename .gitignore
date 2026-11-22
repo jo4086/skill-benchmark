@@ -1,0 +1,48 @@
+# Dependencies
+/node_modules/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+.pnpm-store/
+
+# Local copy of the task archive (canonical copy tracked under tasks/)
+/rest-countries-api-with-color-theme-switcher-master.zip
+
+# Benchmark execution
+/runs/
+/results/
+
+# Environment secrets and runtime state
+**/auth.json
+**/auth.json.lock
+**/auth.lock
+**/.codex/sessions/
+**/.codex/history.jsonl
+**/.codex/*.sqlite
+**/.codex/cache/
+
+# Environment-specific configuration
+environments/*/.codex/config.toml
+
+# Environment copies (local only)
+/environments/
+environments/*/.agents/
+environments/*/.codex/
+
+# Promptfoo
+/.promptfoo/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local credentials
+/.aws/
+**/credentials
+**/.npmrc
+**/*.pem
+**/*.key
+
+# Logs
+*.log
