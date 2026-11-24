@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { projectRoot, run } from '../bootstrap/common.mjs';
+import { projectRoot, run, userDirectory } from '../../bootstrap/environment/common.mjs';
+import { temporaryWorkDirectory } from '../../runner/storage/storage.mjs';
 import { check, command, serve, technicalStack } from './frontend-common.mjs';
 
 export const countriesEvaluatorVersion = 1;
@@ -222,12 +222,12 @@ export async function evaluateCountriesRun(runRecord) {
     return { version: countriesEvaluatorVersion, checks: ['FE01-T01', 'FE01-T02', ...browserIds]
       .map((id) => check(id, 'error', { reason: 'missing workDir' })) };
   }
-  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-benchmark-countries-evaluator-'));
+  const home = await temporaryWorkDirectory('countries-evaluator');
   try {
     const countries = await restoreCountriesReference(runRecord.workDir);
     try { checks.push(await technicalStack(runRecord.workDir, 'FE01')); }
     catch (error) { checks.push(check('FE01-T01', 'error', { reason: error.message })); }
-    const install = await command('pnpm', ['install', '--frozen-lockfile', '--store-dir', path.join(projectRoot, '.pnpm-store')], runRecord.workDir, home, 180000);
+    const install = await command('pnpm', ['install', '--frozen-lockfile', '--store-dir', path.join(userDirectory('XDG_CACHE_HOME', '.cache'), 'pnpm-store')], runRecord.workDir, home, 180000);
     const build = install.exitCode === 0 && !install.timedOut
       ? await command('pnpm', ['build'], runRecord.workDir, home, 120000) : null;
     const buildPass = Boolean(build && build.exitCode === 0 && !build.timedOut);

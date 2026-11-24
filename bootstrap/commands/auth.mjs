@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { environmentsRoot, exists, indexPath, readJson } from './common.mjs';
+import { environmentsRoot, exists, indexPath, readJson } from '../environment/common.mjs';
 
 export function userAuthPath() {
   const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');

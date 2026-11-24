@@ -18,7 +18,7 @@ pnpm run runner -- \
 
 각 실행의 입력 파일을 준비한 직후, Codex 호출 전에 과제 ID·환경·반복·시도 번호와 작업 디렉터리 및 실시간 이벤트 로그 경로를 `START` 줄로 출력한다. 결과 코드를 직접 확인하거나 `pnpm dev`로 실행할 때는 이 작업 디렉터리를 사용한다. 실행 시작 시 `result.json`의 절대 경로도 출력한다.
 
-`--evaluate-quality`를 붙이면 모든 시도 뒤 저장된 결과를 재평가하고 시도당 AI 코드 품질 채점을 한 번 호출한다. 피드백 최대 2회와 독립 시도 3개를 함께 지정하면 AI 채점도 최대 9회다. `--judge-home DIR`로 별도 평가기 인증 홈을 지정할 수 있다. 이 옵션이 없으면 평가기를 자동 호출하지 않으며, 나중에 저장된 `run.json`으로 따로 재평가할 수 있다.
+FE-01은 모든 시도 뒤 저장된 결과를 항상 재평가하고 시도당 AI 코드 품질 채점을 한 번 호출한다. 피드백 최대 2회와 독립 시도 3개를 함께 지정하면 AI 채점도 최대 9회다. `--judge-home DIR`로 별도 평가기 인증 홈을 지정할 수 있고, 생략하면 첫 번째 선택 환경의 Codex 인증 홈을 원본으로 사용한다. 평가기는 인증 파일을 격리된 임시 홈에 복사한다. 기존 `--evaluate-quality` 옵션은 명령 호환을 위해 허용하지만 더 이상 필요하지 않다.
 
 FE-01에서는 `--feedback-repairs 2`로 최초 시도 뒤 최대 두 번의 피드백 수정을 요청할 수 있다. `--repeats`는 서로 독립된 최초 입력을 만들고, 피드백 수정은 각 독립 시도의 **같은 Codex 세션과 작업 디렉터리**를 이어받는다. 한 호출은 최대 세 독립 시도이며, 수정 옵션을 2로 두면 최대 아홉 번의 Codex 호출이 발생한다. 토큰은 매 시도 기록하지만 사용량으로 실행을 중단하지 않는다. 실행 전 최대 호출 수를 확인한다.
 
@@ -51,15 +51,17 @@ Runner는 [과제 패키지](../tasks/README.md)의 허용된 원본 파일과 �
     ├── attempts/<환경>/attempt-01/
     ├── trials/<환경>/trial.json
     ├── comparisons/final/summary.md
-    ├── quality/evaluation.json
+    ├── quality/
+    │   ├── evaluation.json
+    │   └── evaluation.md
     └── snapshots/
         ├── baseline.zip
         └── codex-workspace.zip
 ```
 
-`TMPDIR`과 절대 경로인 `XDG_STATE_HOME`으로 임시·영구 저장 위치를 각각 지정할 수 있다. 독립 반복이 여러 개면 작업 폴더와 기록의 환경 아래에 `repeat-01/`을 추가하고 ZIP 이름에도 반복 번호를 넣는다. `result.json`은 작업 경로, 환경별 시도·토큰, 기록과 평가 및 ZIP의 상대 경로를 모아 보여 준다. `trials/`는 피드백 실행에서, `quality/evaluation.json`은 `--evaluate-quality`에서 생성한다. `user-checklist.md`에는 수동 UI 평가를 기록한다.
+`TMPDIR`과 절대 경로인 `XDG_STATE_HOME`으로 임시·영구 저장 위치를 각각 지정할 수 있다. 독립 반복이 여러 개면 작업 폴더와 기록의 환경 아래에 `repeat-01/`을 추가하고 ZIP 이름에도 반복 번호를 넣는다. `result.json`은 작업 경로, 환경별 시도·토큰, 기록과 평가 및 ZIP의 상대 경로를 모아 보여 준다. `trials/`는 피드백 실행에서, `quality/`의 JSON 원본과 Markdown 보고서는 FE-01 실행마다 생성한다. `user-checklist.md`에는 수동 UI 평가를 기록한다.
 
-각 시도에는 `run.json`, 원시 이벤트 `events.jsonl`, `stderr.txt`, 평가용 소스 복사본 `artifact/`가 저장된다. 최종 ZIP에는 프로젝트 소스, 의존성 명세·잠금 파일, 테스트와 문서를 넣고 환경의 Codex 지침은 `environment/AGENTS.md`에 별도로 보존한다. 인증·캐시·설치 의존성은 제외한다.
+각 시도에는 `run.json`, 원시 이벤트 `events.jsonl`, `stderr.txt`, 평가용 소스 복사본 `artifact/`가 저장된다. `run.json`의 `environmentManifest`에는 실행 시점의 원본 커밋, 로컬 수정 여부, 설치·제외 Skill 목록과 콘텐츠 해시를 복제한다. 최종 ZIP에는 프로젝트 소스, 의존성 명세·잠금 파일, 테스트와 문서를 넣고 환경의 Codex 지침과 같은 출처 기록은 `environment/AGENTS.md`와 `environment/manifest.json`에 별도로 보존한다. 인증·캐시·설치 의존성은 제외한다.
 
 ```sh
 pnpm run restore -- FE-01 run-01 baseline
@@ -76,7 +78,7 @@ pnpm run restore -- FE-01 run-01 baseline
 | baseline | 13,951 ms | 49,103 | 45,952 | 159 |
 | codex-workspace | 13,998 ms | 62,882 | 48,000 | 226 |
 
-로컬 증거는 `runs/2026-11-20T16-14-53-306Z-b5a3877a-c076-47b0-a3ff-c5077b0d2db8/`, `runs/2026-11-20T16-15-07-261Z-6ff0f7d7-9b41-447b-9621-a24340747902/`, `results/2026-11-20T16-15-21-260Z-484f5106-c196-414a-b38d-cca909ef3fa2/`에 있으며 Git에서 제외된다. 이때 `--reasoning low`를 지정했고 `--model`은 지정하지 않아 `run.json`의 모델 값은 `null`이다. 이 결과는 실행 경로 확인이며 모델 동일성, FE-01 품질, Skill 실제 사용, 반복 재현성을 입증하지 않는다.
+로컬 실행 증거는 `runs/2026-11-20T16-14-53-306Z-b5a3877a-c076-47b0-a3ff-c5077b0d2db8/`, `runs/2026-11-20T16-15-07-261Z-6ff0f7d7-9b41-447b-9621-a24340747902/`에 있으며 Git에서 제외된다. 당시 비교 출력은 저장소 내부의 예전 `results/` 정리 시 삭제했다. 이때 `--reasoning low`를 지정했고 `--model`은 지정하지 않아 `run.json`의 모델 값은 `null`이다. 이 결과는 실행 경로 확인이며 모델 동일성, FE-01 품질, Skill 실제 사용, 반복 재현성을 입증하지 않는다.
 ## 저장된 결과 품질 재평가
 
 실행 번호 아래의 `result.json`을 사용하면 환경·반복별 최종 시도를 불러온다.
@@ -89,4 +91,12 @@ pnpm run evaluate -- --result "$result" --skip-ai
 
 재비교와 재평가는 같은 실행 아래의 `comparisons/rechecks/`와 `quality/rechecks/`에 새 기록으로 쌓인다. 이전 결과나 개별 시도를 선택하려면 두 명령의 `--runs <run.json> ...`를 사용한다. 이렇게 여러 실행에서 선택한 기록의 보고서는 과제 아래의 `comparisons/` 또는 `quality/`에 저장한다.
 
+품질 평가가 끝나면 `evaluation.json` 옆의 `evaluation.md`에 환경별 기능 판정과 실패 근거, 접근성, 빌드·타입·린트, AI 코드 리뷰, 합격 기준·총점, 구현 시간·토큰을 저장한다.
+
 `evaluate`는 구현 Codex 재호출 없이 저장된 코드에 객관 검사와 Promptfoo `agent-rubric`을 적용한다. AI 평가에는 비용이 발생한다. `--skip-ai`를 붙이면 객관 검사만 수행한다. 파일 인증이 필요하면 별도 평가 전용 홈에 `auth.json`을 두고 `--judge-home /absolute/path`로 지정한다. 각 평가기는 인증을 새 임시 홈에 복사하고 사용 후 삭제한다. [점수와 판정 기준](../docs/SPEC/REQ01/quality-evaluation.md)
+
+### 실행 전 codex-workspace 버전 선택
+
+Git으로 설치한 codex-workspace를 포함하는 실제 Runner 실행과 `pnpm run test:mine`은 원격 기본 브랜치의 HEAD와 설치 커밋을 비교한다. 두 값이 다르면 터미널에 두 SHA를 표시한다. `y`를 입력하면 Bootstrap이 표시한 커밋의 Skill·Hook·전역 지침을 설치하고 이번 실행부터 사용한다. 선택한 기본 커밋은 환경 데이터의 `environments/index.json`에 저장되며 이후 setup과 verify에도 적용된다. 격리 홈의 로그인과 Codex 세션은 유지된다. Runner의 각 시도 기록에는 실제 사용한 커밋과 콘텐츠 해시가 남는다.
+
+Enter 또는 `n`, 비대화형 실행, 원격 조회 실패 시에는 설치 버전을 사용한다. 로컬 복사본, baseline 단독 실행, `--dry-run`에서는 조회를 생략한다. 다른 벤치마크가 해당 환경을 사용하는 동안에는 버전 교체를 재시도하라는 메시지가 표시된다.

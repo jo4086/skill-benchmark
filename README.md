@@ -4,7 +4,7 @@
 
 비교할 항목은 요구사항 충족률과 코드 품질, Skill 라우팅 정확도와 실제 활용 여부, 실행 시간과 토큰 사용량, 사용량 대비 결과물의 완성도입니다. 자동 측정값과 주관적 평가는 구분합니다.
 
-설계 문서: [요구사항 목록](./docs/REQUIREMENTS/README.md)은 신규 기능의 REQ 번호와 수용 기준을 연결합니다. [아키텍처](./ARCHITECTURE.md)는 책임과 데이터 흐름, [GOAL](./GOAL.md)과 [요구사항별 GOAL](./GOAL/README.md)은 완료 기준, [ROADMAP](./ROADMAP.md)은 구현 단계와 진행 상태를 설명합니다. [Bootstrap 안내](./bootstrap/README.md)에는 설치 명령과 기록 형식, [Runner 안내](./runner/README.md)에는 현재 구현된 실행 명령, [평가 기준](./evaluators/criteria.md)에는 현재 판정 범위가 있습니다.
+설계 문서: [요구사항 목록](./docs/REQUIREMENTS/README.md)은 신규 기능의 REQ 번호와 수용 기준을 연결합니다. [아키텍처](./ARCHITECTURE.md)는 책임과 데이터 흐름, [GOAL](./GOAL.md)과 [요구사항별 GOAL](./docs/GOAL/README.md)은 완료 기준, [ROADMAP](./ROADMAP.md)은 구현 단계와 진행 상태를 설명합니다. [Bootstrap 안내](./bootstrap/README.md)에는 설치 명령과 기록 형식, [Runner 안내](./runner/README.md)에는 현재 구현된 실행 명령, [평가 기준](./evaluators/criteria.md)에는 현재 판정 범위가 있습니다.
 
 외부 과제의 원본과 실행 입력을 분리하는 [과제 패키지 형식](./tasks/README.md)이 구현되어 있습니다. 현재 수동 과제 `FE-01`은 사용자가 제공한 REST Countries ZIP을 원본 그대로 보관합니다. 과거 FE-03 실행은 원본 해시를 검증해 새 FE-01 기준으로 재평가합니다. 공개 GitHub 과제는 [`frontendwizards/frontend-challenges`](https://github.com/frontendwizards/frontend-challenges)에서 검색·등록할 수 있습니다.
 
@@ -31,33 +31,30 @@
 ```text
 skill-benchmark/
 ├── bootstrap/
-│   ├── setup.mjs           # 초기 설정 및 공개 Skill 선택
-│   ├── verify.mjs          # 설치 환경 검증
-│   ├── sources.json        # Skill 모음 메타데이터와 고정 커밋
-│   ├── common.mjs          # 설치·검증 공통 로직
-│   ├── auth.mjs            # 선택적 로그인 파일 복사
-│   ├── bootstrap.test.mjs  # 임시 저장소 기반 통합 테스트
-│   └── README.md           # Bootstrap 사용법
+│   ├── commands/          # 설치·검증·인증 복사·환경 이전 명령
+│   ├── environment/       # 환경 경로·출처·파일 처리 공통 로직
+│   ├── sources.json       # Skill 모음 메타데이터와 고정 커밋
+│   └── bootstrap.test.mjs # 임시 저장소 기반 통합 테스트
 ├── runner/
-│   ├── index.mjs           # 실행 진입점과 Codex 실행
-│   ├── trial.mjs           # 피드백 수정과 시도별 측정 기록
-│   ├── usage.mjs           # JSONL 토큰 지표 수집
-│   ├── runner.test.mjs     # 단위 테스트
-│   └── README.md           # Runner 사용법
-├── environments/
-│   ├── baseline/           # 필수 기준 환경
-│   ├── codex-workspace/    # 필수 검증 환경
-│   └── <선택한 공개 Skill 환경>/ # 선택 모음마다 별도 생성
-├── tasks/                  # FE-01 REST Countries ZIP, 과제 manifest·공통 기술 사양·검색 CLI
-├── fixtures/               # 기존 빈 디렉터리
-├── evaluators/             # Promptfoo 비교, 기능·접근성·정적·AI 품질 재평가
-├── docs/REQUIREMENTS/      # 번호별 신규 기능 요구사항
+│   ├── index.mjs          # 실행 진입점과 Codex 실행 조율
+│   ├── execution/         # 피드백 시도·토큰·자체 검증·터미널 출력
+│   └── storage/           # 실행 경로·결과 기록·ZIP 복원
+├── evaluators/
+│   ├── compare.mjs        # 저장 실행의 Promptfoo 비교 진입점
+│   ├── evaluate.mjs       # 저장 결과의 품질 재평가 진입점
+│   ├── checks/            # 과제 기능·정적·AI 검사
+│   ├── scoring/           # 객관 진단 및 종합 품질 채점
+│   ├── reports/           # 비교·품질 보고서 생성
+│   └── artifacts/         # 평가용 복사본·해시
+├── tasks/
+│   ├── index.mjs          # 과제 관리 CLI
+│   ├── management/        # 검색·등록·실행 입력 준비
+│   ├── FE-01/             # 과제 원본·manifest·요구사항·평가 기준
+│   └── shared/            # 공통 기술 사양과 초기 프로젝트
+├── docs/                  # 요구사항·완료 기준·리뷰·분석 기록
 ├── scripts/
-│   └── test-isolation.sh   # 현재 수동 실행 스크립트
-├── GOAL/                   # REQ별 완료 기준
-├── promptfooconfig.yaml   # 동적 비교 설정 안내
+│   └── test-isolation.sh  # 환경별 대화형 실행
 ├── package.json
-├── .gitignore
 ├── AGENTS.md
 └── README.md
 ```
@@ -90,12 +87,12 @@ Bootstrap은 실행 도구를 확인하고 **Baseline과 codex-workspace를 항�
 6. Runner로 동일한 과제를 선택한 환경에서 반복 실행합니다.
 7. Runner가 출력한 `result.json` 경로에서 실행 기록과 ZIP, `user-checklist.md`, 자동 평가 보고서를 찾습니다. 표는 비캐시 입력·캐시 입력·출력 토큰을 분리합니다.
 
-Bootstrap 명령은 `pnpm run setup`과 `pnpm verify`입니다. 이미 설치한 환경의 로그인 파일만 복사하려면 `pnpm run auth:copy`를 사용합니다. `pnpm setup`은 pnpm 자체 명령과 충돌합니다. 공개 모음 선택, 고정 커밋 설치, 검증, 기존 환경 보존 방법은 [Bootstrap 안내](./bootstrap/README.md)를 참조하세요. 과제 검색·등록은 `pnpm run tasks -- search|register`, Runner는 `pnpm run runner -- --task tasks/FE-01 ...`로 실행합니다. 저장된 실행은 `compare`와 `evaluate`에 `--result <result.json>`을 넘겨 다시 평가할 수 있습니다. `pnpm run restore -- FE-01 run-01 baseline`은 그 실행의 Baseline ZIP을 새 작업 폴더에 풀고 경로를 출력합니다. 자세한 옵션은 [과제 안내](./tasks/README.md)와 [Runner 안내](./runner/README.md)에 있습니다.
+Bootstrap 명령은 `pnpm run setup`과 `pnpm verify`입니다. 이전 버전의 저장소 내부 환경은 `pnpm run environments:migrate`로 이동합니다. 이미 설치한 환경의 로그인 파일만 복사하려면 `pnpm run auth:copy`를 사용합니다. `pnpm setup`은 pnpm 자체 명령과 충돌합니다. 공개 모음 선택, 고정 커밋 설치, 검증, 기존 환경 보존 방법은 [Bootstrap 안내](./bootstrap/README.md)를 참조하세요. 과제 검색·등록은 `pnpm run tasks -- search|register`, Runner는 `pnpm run runner -- --task tasks/FE-01 ...`로 실행합니다. Git으로 설치한 codex-workspace는 테스트 시작 전에 최신 커밋을 확인합니다. 버전이 다르면 현재 로그인을 유지하면서 새 커밋을 기본값으로 선택할 수 있습니다. 저장된 실행은 `compare`와 `evaluate`에 `--result <result.json>`을 넘겨 다시 평가할 수 있습니다. `pnpm run restore -- FE-01 run-01 baseline`은 그 실행의 Baseline ZIP을 새 작업 폴더에 풀고 경로를 출력합니다. 자세한 옵션은 [과제 안내](./tasks/README.md)와 [Runner 안내](./runner/README.md)에 있습니다.
 
 ## 현재 구현 상태와 Git 관리
 
 현재 `package.json`에는 Bootstrap·과제·Runner·Promptfoo 비교·저장 결과 품질 재평가 명령과 관련 테스트, 수동 실행 명령이 등록되어 있습니다. `test:public`은 설치된 공개 환경이 하나면 이를 사용하고, 여러 개면 선택을 요청합니다. `pnpm run test:public <환경 ID>`로 직접 지정할 수도 있습니다. 수동 실행 명령들은 [`scripts/test-isolation.sh`](./scripts/test-isolation.sh)를 통해 설치 기록이 있는 환경의 `HOME`, `CODEX_HOME`, `XDG_CONFIG_HOME`을 설정하고 **대화형** Codex를 `--no-daemon`으로 시작합니다. 작업 경로는 실행마다 저장소 밖 `/tmp/skill-benchmark/manual-<환경>-*/`에 새로 만들고 경로와 Codex 홈을 출력합니다. 이 수동 스크립트는 Skill 설치·환경 디렉터리 생성·검증·과제 실행·결과 수집을 수행하지 않습니다. 정식 Runner의 제한 실행 결과와 남은 검증 항목은 [로드맵](./ROADMAP.md)에 기록했습니다.
 
-현재 Bootstrap 인덱스에는 `baseline`, `codex-workspace`, `superpowers`가 기록되어 있습니다. 환경 구성은 이후 선택과 재설치에 따라 달라질 수 있습니다. `tasks/`의 현재 수동 과제는 REST Countries FE-01입니다. 이전 Browser extensions manager·FAQ 테스트 과제는 종료했고, 과거 실행·리뷰 기록은 원본 증거로 보존합니다. 두 필수 환경의 과거 FE-03 실행은 원본 ZIP 해시가 일치하면 새 FE-01 평가기로 다시 검사할 수 있습니다. 이 실행의 `run.json` 모델 값은 `null`이므로 모델 동일성의 증거로 사용할 수 없습니다. 시각 평가는 사용자가 별도로 수행합니다. `fixtures/`에는 구현 파일이 없고 `scripts/benchmark-runner.mjs`는 빈 파일입니다.
+현재 Bootstrap 인덱스에는 `baseline`, `codex-workspace`, `superpowers`가 기록되어 있습니다. 환경 구성은 이후 선택과 재설치에 따라 달라질 수 있습니다. `tasks/`의 현재 수동 과제는 REST Countries FE-01입니다. 이전 Browser extensions manager·FAQ 테스트 과제는 종료했고, 과거 실행·리뷰 기록은 원본 증거로 보존합니다. 두 필수 환경의 과거 FE-03 실행은 원본 ZIP 해시가 일치하면 새 FE-01 평가기로 다시 검사할 수 있습니다. 이 실행의 `run.json` 모델 값은 `null`이므로 모델 동일성의 증거로 사용할 수 없습니다. 시각 평가는 사용자가 별도로 수행합니다.
 
-`environments/`와 이전 실행의 `runs/`·`results/`는 Git에서 제외됩니다. 인증 정보와 환경변수 파일도 제외하며, 설치 환경 안의 로컬 상태를 Git으로 공유하지 않습니다. 실행 결과를 공유하려면 민감 정보가 없는 별도 산출물 형식을 정해야 합니다.
+Bootstrap 설치 환경은 `~/.local/share/skill-benchmark/environments/`에 보관하고, 평가기 캐시는 `~/.cache/skill-benchmark/`에 둡니다. 과제 작업과 평가기 임시 복사본은 `/tmp/skill-benchmark/`를 사용합니다. 이전 실행의 저장소 내부 `runs/`는 Git에서 제외하고 보존합니다. 저장소 내부의 예전 `results/`는 사용자 요청으로 정리했으며, 외부 상태 경로의 결과는 유지합니다. 인증 정보와 환경변수 파일도 제외하며, 설치 환경 안의 로컬 상태를 Git으로 공유하지 않습니다. 실행 결과를 공유하려면 민감 정보가 없는 별도 산출물 형식을 정해야 합니다.

@@ -25,7 +25,7 @@
 - Baseline과 codex-workspace는 항상 구성하며 선택 해제할 수 없게 한다. Baseline에는 Codex 기본 제공 Skill과 공통 플러그인 Skill을 유지하고 사용자 제작 `AGENTS.md`·Hook·Skill은 추가하지 않는다.
 - codex-workspace는 `https://github.com/jo4086/codex-workspace`의 특정 Git 커밋 설치를 기본으로 한다. 로컬 개발 버전은 원본을 수정하지 않고 복사하는 선택지로 둔다. `templates/global-AGENTS.md`를 환경의 `.agents/AGENTS.md`로 복사하고 `.codex/AGENTS.md`에 연결하며 Skill·Hook을 함께 구성한다.
 - 공개 Skill 모음은 복수 선택할 수 있게 하되, 모음별로 별도 환경을 만든다. 설치 전 저장소 구조와 Codex 호환성을 확인하고, 저장소 URL과 실제 설치 커밋을 기록한다. 공개 원본을 임의로 수정하지 않는다.
-- 환경은 `environments/` 아래에 만들고, 환경마다 `HOME`, `CODEX_HOME`, `XDG_CONFIG_HOME`을 분리한다. 환경 내부의 상대 경로를 우선한다.
+- 설치 환경은 저장소 밖 사용자 데이터 경로의 `skill-benchmark/environments/` 아래에 만들고, 환경마다 `HOME`, `CODEX_HOME`, `XDG_CONFIG_HOME`을 분리한다. 환경 내부의 상대 경로를 우선한다.
 - 환경 사이에 Skill·Hook·`AGENTS.md`가 섞이지 않게 한다. 환경변수 기반 격리와 파일 시스템 격리는 다르며 전자만으로 완전한 파일 접근 격리가 보장되지 않는다.
 - 실제 사용자 `~/.agents`, `~/.codex`, 프로젝트 및 전역 설정을 수정하지 않는다. 사용자가 대화형 질문에 동의하거나 복사 명령을 명시한 경우에만 파일 기반 인증을 격리 환경으로 복사한다. 원본 및 기존 환경의 인증 정보와 설정은 임의로 삭제하거나 덮어쓰지 않는다.
 - 재설치 시 기존 환경을 무조건 삭제하지 않는다. 변경 사항을 확인하고 재실행 가능하게 설계하며, 한 환경의 설치 실패가 다른 환경에 영향을 주지 않게 한다. 설치 결과와 버전을 검증할 수 있어야 한다.

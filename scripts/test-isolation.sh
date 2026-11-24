@@ -3,11 +3,12 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 GROUP="${1:-baseline}"
+ENVIRONMENTS_DIR="$(node --input-type=module -e 'const { environmentsRoot } = await import(process.argv[1]); console.log(environmentsRoot)' "$ROOT/bootstrap/environment/common.mjs")"
 
 if [[ "$GROUP" == public ]]; then
-  INDEX="$ROOT/environments/index.json"
+  INDEX="$ENVIRONMENTS_DIR/index.json"
   if [[ ! -f "$INDEX" ]]; then
-    echo "Environment index is missing; run pnpm run setup first" >&2
+    echo "Environment index is missing; run pnpm run setup or pnpm run environments:migrate" >&2
     exit 1
   fi
   if ! PUBLIC_LIST="$(node -e '
@@ -24,7 +25,7 @@ if [[ "$GROUP" == public ]]; then
     exit 1
   fi
   if [[ -z "$PUBLIC_LIST" ]]; then
-    echo "No public Skill environment is installed; run pnpm run setup first" >&2
+    echo "No public Skill environment is installed; run pnpm run setup or pnpm run environments:migrate" >&2
     exit 1
   fi
   mapfile -t PUBLIC_IDS <<< "$PUBLIC_LIST"
@@ -68,11 +69,11 @@ if [[ "${1:-baseline}" != public ]]; then
 fi
 
 REAL_HOME="$HOME"
-TEST_HOME="$ROOT/environments/$GROUP"
+TEST_HOME="$ENVIRONMENTS_DIR/$GROUP"
 TEST_CODEX_HOME="$TEST_HOME/.codex"
 
 if [[ ! -f "$TEST_HOME/environment.json" || ! -d "$TEST_HOME/.agents/skills" || ! -d "$TEST_CODEX_HOME" ]]; then
-  echo "Environment $GROUP is not installed; run pnpm run setup first" >&2
+  echo "Environment $GROUP is not installed; run pnpm run setup or pnpm run environments:migrate" >&2
   exit 1
 fi
 
@@ -82,7 +83,12 @@ if [[ "$(realpath "$TEST_HOME")" == "$(realpath "$REAL_HOME")" ]]; then
   exit 1
 fi
 
-WORK_DIR="$(node "$ROOT/runner/storage.mjs" manual "$GROUP")"
+if [[ "$GROUP" == codex-workspace ]]; then
+  exec 9<"$ENVIRONMENTS_DIR"
+  node "$ROOT/bootstrap/commands/workspace-update.mjs"
+fi
+
+WORK_DIR="$(node "$ROOT/runner/storage/storage.mjs" manual "$GROUP")"
 echo "Codex home: $TEST_CODEX_HOME"
 echo "Manual Codex working directory: $WORK_DIR"
 cd "$WORK_DIR"

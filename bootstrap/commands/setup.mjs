@@ -2,22 +2,32 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { copyUserAuth, hasUserAuth } from './auth.mjs';
 import {
   assertNoSymlinks, copySkills, environmentPaths, environmentsRoot, exists,
-  fetchPinnedSource, hashTree, indexPath, projectRoot, readJson, run,
-  validateSources, writeJsonAtomic,
-} from './common.mjs';
+  fetchPinnedSource, hashTree, indexPath, legacyEnvironmentsRoot, prepareEnvironmentDataRoot, projectRoot, readJson, run,
+  lockEnvironments, workspaceDefault, validateSources, writeJsonAtomic,
+} from '../environment/common.mjs';
+
+function parseSkillNames(value) {
+  const names = value.split(',').filter(Boolean);
+  if (!names.length || new Set(names).size !== names.length || names.some((name) => !/^[a-z0-9][a-z0-9-]*$/.test(name))) {
+    throw new Error('Invalid --exclude-workspace-skills value');
+  }
+  return names.sort();
+}
 
 function parseArgs(args) {
-  const options = { publicIds: null, archiveExisting: false, copyAuth: false, localWorkspace: null, commonSkillsDir: null, list: false };
+  const options = { publicIds: null, archiveExisting: false, copyAuth: false, localWorkspace: null, commonSkillsDir: null, excludeWorkspaceSkills: [], list: false };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === '--public' && args[index + 1]) options.publicIds = args[++index].split(',').filter(Boolean);
     else if (arg === '--local-workspace' && args[index + 1]) options.localWorkspace = args[++index];
     else if (arg === '--common-skills-dir' && args[index + 1]) options.commonSkillsDir = args[++index];
+    else if (arg === '--exclude-workspace-skills' && args[index + 1]) options.excludeWorkspaceSkills = parseSkillNames(args[++index]);
     else if (arg === '--archive-existing') options.archiveExisting = true;
     else if (arg === '--copy-auth') options.copyAuth = true;
     else if (arg === '--list') options.list = true;
@@ -28,10 +38,26 @@ function parseArgs(args) {
 }
 
 function printHelp() {
-  console.log('Usage: pnpm run setup [--public id,id | --public none] [--local-workspace path] [--common-skills-dir path] [--archive-existing] [--copy-auth] [--list]');
+  console.log('Usage: pnpm run setup [--public id,id | --public none] [--local-workspace path] [--common-skills-dir path] [--exclude-workspace-skills name[,name]] [--archive-existing] [--copy-auth] [--list]');
   console.log('Baseline and codex-workspace are always selected. Without --public, interactive selection is shown.');
   console.log('--archive-existing moves an existing environment to environments/.backups before installing a new one.');
   console.log('--copy-auth copies the current file-based Codex login to managed environments without replacing existing auth files.');
+  console.log('--exclude-workspace-skills omits named codex-workspace Skills and records the exclusion in its manifest.');
+}
+
+async function localWorkspaceSource(directory, skillsPath, excludedSkillNames) {
+  const workspace = await fs.realpath(directory);
+  const source = { kind: 'local', path: workspace, skillsPath, excludedSkillNames };
+  try {
+    const commit = await run('git', ['-C', workspace, 'rev-parse', '--verify', 'HEAD']);
+    if (!/^[0-9a-f]{40}$/.test(commit)) throw new Error('Invalid local Git commit');
+    source.commit = commit;
+    source.dirty = Boolean(await run('git', ['-C', workspace, 'status', '--porcelain', '--untracked-files=all']));
+  } catch {
+    source.commit = null;
+    source.dirty = null;
+  }
+  return source;
 }
 
 async function offerAuthCopy(requested) {
@@ -75,7 +101,7 @@ async function choosePublic(sources, requested) {
   }
 }
 
-async function prepareEnvironment(stage, id, source, checkout, codexVersion) {
+export async function prepareEnvironment(stage, id, source, checkout, codexVersion) {
   const agents = path.join(stage, '.agents');
   const codex = path.join(stage, '.codex');
   await fs.mkdir(path.join(agents, 'skills'), { recursive: true });
@@ -83,12 +109,15 @@ async function prepareEnvironment(stage, id, source, checkout, codexVersion) {
   await fs.mkdir(path.join(stage, '.config'));
   let skillNames = [];
   let commonSkillNames = [];
+  const excludedSkillNames = source.excludedSkillNames ?? [];
   if (source.commonSkills) {
     commonSkillNames = await copySkills(source.commonSkills.path, path.join(agents, 'skills'));
   }
+  const commonExclusions = excludedSkillNames.filter((name) => commonSkillNames.includes(name));
+  if (commonExclusions.length) throw new Error(`Excluded workspace Skill is installed from common Skills: ${commonExclusions.join(', ')}`);
   if (source.kind !== 'baseline') {
     const root = path.join(checkout, source.skillsPath);
-    skillNames = await copySkills(root, path.join(agents, 'skills'));
+    skillNames = await copySkills(root, path.join(agents, 'skills'), { excludeNames: excludedSkillNames });
   }
   if (id === 'codex-workspace') {
     const agentInstructions = path.join(checkout, 'templates', 'global-AGENTS.md');
@@ -105,8 +134,11 @@ async function prepareEnvironment(stage, id, source, checkout, codexVersion) {
     id,
     paths: environmentPaths(id),
     source,
+    sourceCommit: source.commit ?? null,
+    sourceDirty: source.kind === 'local' ? source.dirty ?? null : false,
     skillNames: [...commonSkillNames, ...skillNames].sort(),
     commonSkillNames,
+    excludedSkillNames,
     contentHash: await hashTree(agents),
     codexVersion,
     installedAt: new Date().toISOString(),
@@ -146,7 +178,7 @@ async function inspectExisting(id, source) {
 
 async function confirmArchiving(conflicts, archiveExisting) {
   if (!conflicts.length || archiveExisting) return;
-  const labels = conflicts.map((id) => `environments/${id}/`).join(', ');
+  const labels = conflicts.map((id) => path.join(environmentsRoot, id)).join(', ');
   if (!stdin.isTTY) {
     throw new Error(`${labels} already exists and differs. Inspect it, then use --archive-existing to preserve and replace it.`);
   }
@@ -203,12 +235,14 @@ async function refreshIndex(codexVersion) {
     if (manifest.schemaVersion !== 1 || manifest.id !== id) throw new Error(`Invalid existing manifest: ${id}`);
     environments.push({ id, ...manifest.paths, source: manifest.source, manifest: `./environments/${id}/environment.json` });
   }
+  let workspaceDefault;
   if (await exists(indexPath)) {
     if ((await fs.lstat(indexPath)).isSymbolicLink()) throw new Error('Environment index is a symlink');
     const previous = await readJson(indexPath);
+    workspaceDefault = previous.workspaceDefault;
     if (previous.schemaVersion !== 1 || !Array.isArray(previous.environments)) throw new Error('Existing environment index is not managed by Bootstrap');
   }
-  await writeJsonAtomic(indexPath, { schemaVersion: 1, codexVersion, generatedAt: new Date().toISOString(), environments });
+  await writeJsonAtomic(indexPath, { schemaVersion: 1, codexVersion, generatedAt: new Date().toISOString(), workspaceDefault, environments });
 }
 
 async function main() {
@@ -225,27 +259,39 @@ async function main() {
   const commonSkills = options.commonSkillsDir
     ? { path: await fs.realpath(options.commonSkillsDir), contentHash: await hashTree(await fs.realpath(options.commonSkillsDir)) }
     : null;
-  const workspaceSource = options.localWorkspace
-    ? { kind: 'local', path: await fs.realpath(options.localWorkspace), skillsPath: sources.workspace.skillsPath }
-    : { kind: 'git', ...sources.workspace };
-  if (commonSkills) workspaceSource.commonSkills = commonSkills;
-  await fs.mkdir(environmentsRoot, { recursive: true });
-  const installs = [
-    ['baseline', { kind: 'baseline', ...(commonSkills ? { commonSkills } : {}) }],
-    ['codex-workspace', workspaceSource],
-    ...selected.map((source) => [source.id, { kind: 'git', ...source, ...(commonSkills ? { commonSkills } : {}) }]),
-  ];
-  const conflicts = [];
-  for (const [id, source] of installs) {
-    if (await inspectExisting(id, source) === 'conflict') conflicts.push(id);
+  if (await exists(legacyEnvironmentsRoot) && !(await exists(environmentsRoot))) {
+    throw new Error('Existing project-local environments found. Run pnpm run environments:migrate first.');
   }
-  await confirmArchiving(conflicts, options.archiveExisting);
-  for (const [id, source] of installs) {
-    await installOne(id, source, options.archiveExisting || conflicts.includes(id), codexVersion);
-    await refreshIndex(codexVersion);
+  await prepareEnvironmentDataRoot();
+  await fs.mkdir(environmentsRoot, { recursive: true, mode: 0o700 });
+  if (!(await fs.lstat(environmentsRoot)).isDirectory()) throw new Error('Environments path must be a directory');
+  console.log(`Environment directory: ${environmentsRoot}`);
+  const lock = await fs.open(environmentsRoot);
+  try {
+    lockEnvironments(lock, true);
+    const workspaceSource = options.localWorkspace
+      ? await localWorkspaceSource(options.localWorkspace, sources.workspace.skillsPath, options.excludeWorkspaceSkills)
+      : { kind: 'git', ...workspaceDefault(sources, await exists(indexPath) ? await readJson(indexPath) : null), excludedSkillNames: options.excludeWorkspaceSkills };
+    if (commonSkills) workspaceSource.commonSkills = commonSkills;
+    const installs = [
+      ['baseline', { kind: 'baseline', ...(commonSkills ? { commonSkills } : {}) }],
+      ['codex-workspace', workspaceSource],
+      ...selected.map((source) => [source.id, { kind: 'git', ...source, ...(commonSkills ? { commonSkills } : {}) }]),
+    ];
+    const conflicts = [];
+    for (const [id, source] of installs) {
+      if (await inspectExisting(id, source) === 'conflict') conflicts.push(id);
+    }
+    await confirmArchiving(conflicts, options.archiveExisting);
+    for (const [id, source] of installs) {
+      await installOne(id, source, options.archiveExisting || conflicts.includes(id), codexVersion);
+      await refreshIndex(codexVersion);
+    }
+  } finally {
+    await lock.close();
   }
   await offerAuthCopy(options.copyAuth);
   console.log('Environment setup complete. Run pnpm verify before using the environments.');
 }
 
-main().catch((error) => { console.error(`Setup failed: ${error.message}`); process.exitCode = 1; });
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch((error) => { console.error(`Setup failed: ${error.message}`); process.exitCode = 1; });

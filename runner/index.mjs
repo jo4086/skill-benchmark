@@ -5,21 +5,22 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertNoSymlinks, environmentPaths, exists, projectRoot, readJson, run, writeJsonAtomic } from '../bootstrap/common.mjs';
-import { collectSessionId, collectUsage } from './usage.mjs';
-import { prepareTask } from '../tasks/package.mjs';
+import { assertNoSymlinks, environmentDataRoot, environmentPaths, environmentsRoot, lockEnvironments, exists, indexPath, projectRoot, readJson, run, writeJsonAtomic } from '../bootstrap/environment/common.mjs';
+import { checkWorkspaceUpdate } from '../bootstrap/commands/workspace-update.mjs';
+import { collectSessionId, collectUsage } from './execution/usage.mjs';
+import { prepareTask } from '../tasks/management/package.mjs';
 import { compareRuns } from '../evaluators/compare.mjs';
-import { evaluateTaskRun } from '../evaluators/task.mjs';
-import { gradeTaskAssessment } from '../evaluators/quality.mjs';
-import { copyEvaluationSnapshot } from '../evaluators/snapshot.mjs';
+import { evaluateTaskRun } from '../evaluators/checks/task.mjs';
+import { gradeTaskAssessment } from '../evaluators/scoring/quality.mjs';
+import { copyEvaluationSnapshot } from '../evaluators/artifacts/snapshot.mjs';
 import { reevaluateRuns } from '../evaluators/evaluate.mjs';
-import { runTrial } from './trial.mjs';
-import { collectSelfValidation } from './self-validation.mjs';
-import { assertSafeWorkPath, captureInstructions, createRunDirectories } from './storage.mjs';
-import { createUserChecklist, environmentDirectory, saveResult, snapshotFinalAttempt } from './result.mjs';
+import { runTrial } from './execution/trial.mjs';
+import { collectSelfValidation } from './execution/self-validation.mjs';
+import { assertSafeWorkPath, captureInstructions, createRunDirectories } from './storage/storage.mjs';
+import { createUserChecklist, environmentDirectory, saveResult, snapshotFinalAttempt } from './storage/result.mjs';
+import { error, log, withColorizedOutput } from './execution/terminal.mjs';
 import { chromium } from 'playwright';
 
-const indexFile = path.join(projectRoot, 'environments', 'index.json');
 const help = `Usage: pnpm run runner -- --task tasks/FE-01 --environments ID[,ID] [options]
        pnpm run runner -- --task-id ID --prompt-file FILE --fixture-dir DIR --environments ID[,ID] [options]
 
@@ -30,8 +31,7 @@ Options:
   --timeout-seconds N  Per-run timeout (default: 1800)
   --feedback-repairs N  Repair the same session after evaluation (0-2; default: 0)
   --diagnostic-target-score N  Objective diagnostic stop score (1-100; default: 50 with repairs)
-  --evaluate-quality  Run static, Playwright and AI code quality evaluation after all attempts
-  --judge-home DIR    Isolated evaluator Codex home (with --evaluate-quality)
+  --judge-home DIR    Evaluator authentication source (defaults to the first environment)
   --dry-run            Validate inputs and print the execution plan only
 
 Every live invocation is limited to three independent trials. Repair mode supports the FE-01 objective diagnostic only; full quality pass cannot be determined. Logs and working files may contain sensitive data.
@@ -92,10 +92,12 @@ export function parseArgs(args) {
     throw new Error('--diagnostic-target-score requires --feedback-repairs');
   }
   if (options.environments.length * options.repeats > 3) throw new Error('Maximum three runs per invocation');
-  if (options.evaluateQuality && (!options.taskDir || path.basename(path.resolve(options.taskDir)) !== 'FE-01')) {
+  const supportsQualityEvaluation = options.taskDir && path.basename(path.resolve(options.taskDir)) === 'FE-01';
+  if (options.evaluateQuality && !supportsQualityEvaluation) {
     throw new Error('Quality evaluation requires --task tasks/FE-01');
   }
-  if (options.judgeHome && !options.evaluateQuality) throw new Error('--judge-home requires --evaluate-quality');
+  options.evaluateQuality = Boolean(supportsQualityEvaluation);
+  if (options.judgeHome && !options.evaluateQuality) throw new Error('--judge-home requires --task tasks/FE-01');
   if (options.judgeHome) options.judgeHome = path.resolve(options.judgeHome);
   if (options.model !== undefined && !/^[\w.:-]+$/.test(options.model)) throw new Error('Invalid --model');
   if (options.reasoning !== undefined && !['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(options.reasoning)) {
@@ -129,20 +131,32 @@ async function inspectInputs(options) {
 }
 
 async function inspectEnvironments(ids, dryRun) {
-  if ((await fs.lstat(indexFile)).isSymbolicLink()) throw new Error('Environment index is a symlink');
-  const index = await readJson(indexFile);
+  await run(process.execPath, [path.join(projectRoot, 'bootstrap', 'verify.mjs')]);
+  const index = await readJson(indexPath);
   if (index.schemaVersion !== 1 || !Array.isArray(index.environments)) throw new Error('Invalid environment index');
   const selected = ids.map((id) => {
     const entry = index.environments.find((item) => item.id === id);
     if (!entry || JSON.stringify(environmentPaths(id)) !== JSON.stringify({ home: entry.home, codexHome: entry.codexHome, xdgConfigHome: entry.xdgConfigHome })
       || entry.manifest !== `./environments/${id}/environment.json`) throw new Error(`Unknown or invalid environment: ${id}`);
-    return { id, home: path.join(projectRoot, entry.home), codexHome: path.join(projectRoot, entry.codexHome), xdgConfigHome: path.join(projectRoot, entry.xdgConfigHome) };
+    return { id, home: path.join(environmentDataRoot, entry.home), codexHome: path.join(environmentDataRoot, entry.codexHome), xdgConfigHome: path.join(environmentDataRoot, entry.xdgConfigHome) };
   });
-  await run(process.execPath, [path.join(projectRoot, 'bootstrap', 'verify.mjs')]);
   for (const environment of selected) {
     const manifest = await readJson(path.join(environment.home, 'environment.json'));
     environment.source = manifest.source;
     environment.contentHash = manifest.contentHash;
+    environment.manifest = {
+      schemaVersion: 1,
+      id: manifest.id,
+      source: manifest.source,
+      sourceCommit: manifest.sourceCommit ?? manifest.source?.commit ?? null,
+      sourceDirty: manifest.sourceDirty ?? null,
+      skillNames: [...manifest.skillNames].sort(),
+      commonSkillNames: [...manifest.commonSkillNames].sort(),
+      excludedSkillNames: [...(manifest.excludedSkillNames ?? [])].sort(),
+      contentHash: manifest.contentHash,
+      codexVersion: manifest.codexVersion,
+      installedAt: manifest.installedAt,
+    };
   }
   if (!dryRun) {
     for (const environment of selected) {
@@ -214,6 +228,7 @@ async function runOne(options, inputs, environment, codexVersion, sequence, repe
     taskSource: options.taskSource ?? null, taskManifestHash: options.taskManifestHash ?? null,
     promptFile: inputs.originalPromptFile ?? inputs.promptFile, fixtureDir: inputs.originalFixtureDir, workDir,
     codexVersion, environmentSource: environment.source, environmentContentHash: environment.contentHash,
+    environmentManifest: environment.manifest,
     model: options.model, reasoningEffort: options.reasoning ?? null,
     options: { sandbox: 'workspace-write', approvalPolicy: 'never', networkAccess: true, timeoutSeconds: options.timeoutSeconds, ephemeral: !options.feedbackRepairs },
     browser: options.browser,
@@ -229,7 +244,7 @@ async function runOne(options, inputs, environment, codexVersion, sequence, repe
     await assertSafeWorkPath(workDir);
     if (attemptNumber === 1) await copyFixture(inputs.fixtureDir, workDir);
     const args = buildCodexArgs(options, workDir, repair?.sessionId);
-    console.log(`START ${options.taskId} ${environment.id} repetition ${repetition} attempt ${record.attemptNumber}: work ${workDir}; log ${path.join(outputDir, 'events.jsonl')}`);
+    log(`START ${options.taskId} ${environment.id} repetition ${repetition} attempt ${record.attemptNumber}: work ${workDir}; log ${path.join(outputDir, 'events.jsonl')}`);
     const outcome = await executeCodex({
       args, prompt: repair?.prompt ?? inputs.prompt, cwd: workDir,
       env: { ...process.env, HOME: environment.home, CODEX_HOME: environment.codexHome, XDG_CONFIG_HOME: environment.xdgConfigHome,
@@ -260,7 +275,7 @@ async function runOne(options, inputs, environment, codexVersion, sequence, repe
     record.durationMs = Date.parse(record.finishedAt) - Date.parse(startedAt);
     await writeJsonAtomic(path.join(outputDir, 'run.json'), record);
   }
-  console.log(`${record.status.toUpperCase()} ${environment.id} repetition ${repetition}: ${outputDir}`);
+  log(`${record.status.toUpperCase()} ${environment.id} repetition ${repetition}: ${outputDir}`);
   return { ...record, recordFile: path.join(outputDir, 'run.json') };
 }
 
@@ -268,6 +283,7 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) { console.log(help); return; }
   const prepared = options.taskDir ? await prepareTask(options.taskDir) : null;
+  let environmentLock;
   try {
     if (prepared) {
       options.taskId = prepared.manifest.id;
@@ -277,6 +293,8 @@ async function main() {
       options.fixtureDir = prepared.fixtureDir;
     }
     const inputs = await inspectInputs(options);
+    environmentLock = await fs.open(environmentsRoot);
+    lockEnvironments(environmentLock, false);
     const { selected, codexVersion } = await inspectEnvironments(options.environments, options.dryRun);
     const browserExecutable = chromium.executablePath();
     if (!(await exists(browserExecutable))) throw new Error(`Playwright Chromium is missing: ${browserExecutable}`);
@@ -290,8 +308,12 @@ async function main() {
     console.log(`Task ${options.taskId}; input SHA-256 ${inputs.inputHash}; ${plan.length} independent trial(s); up to ${plan.length * (options.feedbackRepairs + 1)} Codex attempt(s)${options.feedbackRepairs ? `; objective diagnostic stop score ${options.diagnosticTargetScore}` : ''}${options.evaluateQuality ? `; up to ${plan.length * (options.feedbackRepairs + 1)} AI quality grading call(s)` : ''}: ${plan.map(({ environment }) => environment.id).join(', ')}`);
     if (options.dryRun) return;
     await checkStorageCommands();
+    const workspace = selected.find(({ id }) => id === 'codex-workspace');
+    if (workspace) await checkWorkspaceUpdate(workspace, codexVersion, environmentLock);
+    else await environmentLock.close();
     await executePlan(options, inputs, prepared, plan, codexVersion);
   } finally {
+    await environmentLock?.close();
     if (prepared) await prepared.cleanup();
   }
 }
@@ -312,11 +334,11 @@ export async function executePlan(options, inputs, prepared, plan, codexVersion)
     schemaVersion: 1, taskId: options.taskId, run: result.name, status: 'running',
     workDir: result.workDir, startedAt: new Date().toISOString(), finishedAt: null,
     userChecklist: 'user-checklist.md', runs: [], trials: [], snapshots: [], comparisons: [],
-    qualityEvaluation: null, error: null,
+    qualityEvaluation: null, qualityReport: null, error: null,
   };
   const save = () => saveResult(result, summary);
   await save();
-  console.log(`Work: ${result.workDir}\nResult: ${path.join(result.outputDir, 'result.json')}`);
+  log(`Work: ${result.workDir}\nResult: ${path.join(result.outputDir, 'result.json')}`);
   let snapshotDir;
   try {
     await createUserChecklist(options, result);
@@ -370,7 +392,7 @@ export async function executePlan(options, inputs, prepared, plan, codexVersion)
             },
           });
           if (trial.status !== 'diagnostic_target_reached') failures += 1;
-          console.log(`Trial ${environment.id} repetition ${repetition}: ${trial.status}; ${trialDir}`);
+          log(`Trial ${environment.id} repetition ${repetition}: ${trial.status}; ${trialDir}`);
         } else if ((await execute()).status !== 'completed') {
           failures += 1;
         }
@@ -389,23 +411,26 @@ export async function executePlan(options, inputs, prepared, plan, codexVersion)
       const stages = options.feedbackRepairs ? [['first', firstRuns]] : [['final', finalRuns]];
       if (options.feedbackRepairs && finalRuns.some((entry, index) => entry.id !== firstRuns[index].id)) stages.push(['final', finalRuns]);
       for (const [stage, runs] of stages) {
-        const { outputDir } = await compareRuns(runs, {
+        const { outputDir } = await withColorizedOutput(() => compareRuns(runs, {
           outputDirectory: path.join(result.outputDir, 'comparisons', stage),
           assess: options.feedbackRepairs ? async (entry) => assessments.get(entry.id) : undefined,
-        });
+        }));
         summary.comparisons.push(relative(path.join(outputDir, 'comparison.json')));
         await save();
-        console.log(`Comparison: ${path.join(outputDir, 'summary.md')}`);
+        log(`Comparison: ${path.join(outputDir, 'summary.md')}`);
       }
     }
     if (options.evaluateQuality) {
-      const { outputDir, record } = await reevaluateRuns([...attempts.values()], {
-        judgeHome: options.judgeHome,
+      const judgeHome = options.judgeHome ?? plan[0].environment.codexHome;
+      const { outputDir, record, reportFile } = await withColorizedOutput(() => reevaluateRuns([...attempts.values()], {
+        judgeHome,
         outputDirectory: path.join(result.outputDir, 'quality'),
-      });
+      }));
       summary.qualityEvaluation = relative(path.join(outputDir, 'evaluation.json'));
+      summary.qualityReport = relative(reportFile);
       if (record.entries.some((entry) => entry.aiCode.status === 'error')) failures += 1;
-      console.log(`Quality evaluation: ${path.join(outputDir, 'evaluation.json')}`);
+      log(`Quality evaluation: ${path.join(outputDir, 'evaluation.json')}`);
+      log(`Quality report: ${reportFile}`);
     }
     if (failures) throw new Error(`${failures} run, evaluation, or archive failure(s); inspect ${path.join(result.outputDir, 'result.json')}`);
     summary.status = 'completed';
@@ -421,5 +446,5 @@ export async function executePlan(options, inputs, prepared, plan, codexVersion)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((error) => { console.error(`Runner failed: ${error.message}`); process.exitCode = 1; });
+  main().catch((cause) => { error(`Runner failed: ${cause.message}`); process.exitCode = 1; });
 }

@@ -3,7 +3,7 @@ import { createReadStream, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { exists, projectRoot, readJson, run, writeJsonAtomic } from '../bootstrap/common.mjs';
+import { exists, projectRoot, readJson, run, userDirectory, writeJsonAtomic } from '../../bootstrap/environment/common.mjs';
 
 const script = fileURLToPath(import.meta.url);
 const excluded = new Set([
@@ -20,8 +20,7 @@ export function safeSegment(value) {
 }
 
 export function stateDirectory() {
-  const base = process.env.XDG_STATE_HOME;
-  return path.join(base && path.isAbsolute(base) ? base : path.join(os.homedir(), '.local', 'state'), 'skill-benchmark');
+  return userDirectory('XDG_STATE_HOME', '.local', 'state');
 }
 
 export function taskResultsDirectory(taskId) {
@@ -49,6 +48,10 @@ async function workRoot() {
   }
   await assertSafeWorkPath(root);
   return root;
+}
+
+export async function temporaryWorkDirectory(prefix) {
+  return fs.mkdtemp(path.join(await workRoot(), `${safeSegment(prefix)}-`));
 }
 
 async function reserveResult(taskId) {
@@ -107,7 +110,7 @@ export async function captureInstructions(environment) {
   return instructions;
 }
 
-export async function archiveWorktree(workDir, destination, instructions) {
+export async function archiveWorktree(workDir, destination, instructions, environmentManifest = null) {
   if (!(await fs.lstat(workDir)).isDirectory()) throw new Error('Snapshot source must be a directory');
   const directory = path.dirname(destination);
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -125,13 +128,16 @@ export async function archiveWorktree(workDir, destination, instructions) {
       },
     });
     const names = Object.keys(instructions);
-    if (names.length) {
+    if (names.length || environmentManifest) {
       const metadata = path.join(stage, 'environment');
       await fs.mkdir(metadata, { mode: 0o700 });
       for (const name of names) await fs.writeFile(path.join(metadata, name), instructions[name], { mode: 0o600 });
+      if (environmentManifest) {
+        await fs.writeFile(path.join(metadata, 'manifest.json'), `${JSON.stringify(environmentManifest, null, 2)}\n`, { mode: 0o600 });
+      }
     }
     const temporary = path.join(stage, 'snapshot.zip');
-    const contents = names.length ? ['project', 'environment'] : ['project'];
+    const contents = names.length || environmentManifest ? ['project', 'environment'] : ['project'];
     await run('zip', ['-q', '-r', temporary, ...contents], { cwd: stage, env: { ...process.env, ZIPOPT: '' } });
     const sha256 = await fileHash(temporary);
     await fs.chmod(temporary, 0o600);
@@ -166,7 +172,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   const main = async () => {
     if (command === 'reserve' && args.length === 1) return reserveResult(safeSegment(args[0]));
     if (command === 'manual' && args.length === 1) {
-      return fs.mkdtemp(path.join(await workRoot(), `manual-${safeSegment(args[0])}-`));
+      return temporaryWorkDirectory(`manual-${safeSegment(args[0])}`);
     }
     if (command === 'restore' && args[0] === '--help') return usage;
     if (command === 'restore' && (args.length === 3 || args.length === 4)) {

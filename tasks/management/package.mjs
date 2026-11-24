@@ -4,9 +4,9 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertNoSymlinks, hashTree, readJson, run } from '../bootstrap/common.mjs';
+import { assertNoSymlinks, hashTree, readJson, run } from '../../bootstrap/environment/common.mjs';
 
-const tasksRoot = path.dirname(fileURLToPath(import.meta.url));
+const tasksRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const frontendRoot = path.join(tasksRoot, 'shared', 'frontend');
 const templateRoot = path.join(frontendRoot, 'template');
 const excludedNames = new Set(['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'README.md', 'README-template.md', 'node_modules', 'solutions', 'evaluation', '__tests__', 'reportAccessibility.ts']);

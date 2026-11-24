@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { ESLint } from 'eslint';
 import tseslint from 'typescript-eslint';
-import { projectRoot } from '../bootstrap/common.mjs';
+import { projectRoot } from '../../bootstrap/environment/common.mjs';
 import { command } from './frontend-common.mjs';
 
 export const staticEvaluatorVersion = 1;

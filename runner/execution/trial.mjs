@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { writeJsonAtomic } from '../bootstrap/common.mjs';
-import { taskResultsDirectory } from './storage.mjs';
+import { writeJsonAtomic } from '../../bootstrap/environment/common.mjs';
+import { taskResultsDirectory } from '../storage/storage.mjs';
 
 function addUsage(total, usage) {
   const next = {};

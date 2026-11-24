@@ -30,4 +30,4 @@ pnpm run runner -- --task tasks/FE-01 --environments baseline,codex-workspace --
 
 `register`에 `--ids`를 생략하면 검색 결과 번호를 복수 선택할 수 있다. 등록·실행 준비는 원본 저장소의 `npm install`을 호출하지 않는다.
 
-`evaluation/`은 평가기에만 제공한다. Runner는 이를 작업 디렉터리에 복사하거나 프롬프트에 포함하지 않는다. FE-01의 기능 8개·접근성 1개·기술 2개는 `evaluators/countries.mjs`가 검사한다. [기능 점검표](../evaluators/functional-review.md)는 자동 검사가 놓치는 조작과 예외 상태를 확인하는 데 사용한다. 시각적 품질은 사용자가 별도로 판단한다.
+`evaluation/`은 평가기에만 제공한다. Runner는 이를 작업 디렉터리에 복사하거나 프롬프트에 포함하지 않는다. FE-01의 기능 8개·접근성 1개·기술 2개는 `evaluators/checks/countries.mjs`가 검사한다. [기능 점검표](../evaluators/functional-review.md)는 자동 검사가 놓치는 조작과 예외 상태를 확인하는 데 사용한다. 시각적 품질은 사용자가 별도로 판단한다.

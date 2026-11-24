@@ -16,7 +16,15 @@
 - [ ] 자동 측정과 LLM 기반 주관 평가를 구분하며, 반복 결과·평가 근거·한계를 함께 보고한다.
 - [ ] 사용자 전역 설정과 원본 Skill을 수정하지 않고, 인증 정보·브라우저 프로필·캐시가 Git이나 공유 결과에 포함되지 않게 한다.
 
-개별 기능의 완료 기준은 [요구사항별 GOAL](./GOAL/README.md)에서 확인한다.
+개별 기능의 완료 기준은 [요구사항별 GOAL](./docs/GOAL/README.md)에서 확인한다.
+
+## 디렉터리 정리 완료 기준
+
+- [x] 기능별 하위 폴더로 명령·실행·저장·검사·채점·보고서·과제 관리 역할을 구분하고 기존 pnpm 명령과 동작을 유지한다.
+- [x] 빈 자리표시자와 중복 ZIP, 사용자가 삭제를 요청한 저장소 내부 `results/`를 정리한다. `runs/`, 과제 원본, 외부 저장 결과와 리뷰 문서는 보존한다.
+- [x] 변경한 import·파일 경로·문서 링크와 Bootstrap·Runner·Evaluator·과제 테스트를 검증한다.
+
+검증: `pnpm run test:bootstrap`(6개), `pnpm run test:runner`(14개), `pnpm run test:evaluators`(17개), `pnpm run test:tasks` 통과. Bootstrap·Runner·Evaluator 테스트는 샌드박스의 하위 명령 제한으로 실패한 뒤 승인된 외부 실행으로 검증했다. 40개 모듈의 문법·import, 변경 문서의 로컬 링크, 셸 문법과 `git diff --check`도 확인했다. 실제 모델을 호출하는 벤치마크는 실행하지 않았다.
 
 ## 현재 범위와 판단 기준
 

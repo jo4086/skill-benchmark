@@ -1,13 +1,50 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const environmentsRoot = path.join(projectRoot, 'environments');
+export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+export const legacyEnvironmentsRoot = path.join(projectRoot, 'environments');
+
+export function userDirectory(variable, ...fallback) {
+  const override = process.env[variable];
+  const root = override && path.isAbsolute(override) ? override : path.join(os.homedir(), ...fallback);
+  return path.join(root, 'skill-benchmark');
+}
+
+export const environmentDataRoot = userDirectory('XDG_DATA_HOME', '.local', 'share');
+export const environmentsRoot = path.join(environmentDataRoot, 'environments');
 export const indexPath = path.join(environmentsRoot, 'index.json');
+
+// flock operates on the inherited open file description until its owner closes it.
+export function lockEnvironments(handle, exclusive) {
+  const result = spawnSync('flock', [exclusive ? '-x' : '-s', '-n', '3'], {
+    stdio: ['ignore', 'ignore', 'inherit', handle.fd],
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error('Environment setup or benchmark in progress. Retry after it finishes.');
+}
+
+export function workspaceDefault(sources, index) {
+  const pin = index?.workspaceDefault;
+  if (pin?.repository !== sources.workspace.repository) return sources.workspace;
+  if (!/^[0-9a-f]{40}$/.test(pin.commit)) throw new Error('Invalid workspace default commit');
+  return { ...sources.workspace, commit: pin.commit };
+}
+
+export async function prepareEnvironmentDataRoot() {
+  const project = await fs.realpath(projectRoot);
+  const isInProject = (directory) => directory === project || directory.startsWith(`${project}${path.sep}`);
+  if (isInProject(environmentDataRoot)) throw new Error('Environment data directory must be outside the project');
+  await fs.mkdir(environmentDataRoot, { recursive: true, mode: 0o700 });
+  const stat = await fs.lstat(environmentDataRoot);
+  if (!stat.isDirectory() || stat.uid !== process.getuid() || (stat.mode & 0o077)
+    || isInProject(await fs.realpath(environmentDataRoot))) {
+    throw new Error(`Expected a private environment data directory outside the project: ${environmentDataRoot}`);
+  }
+}
 
 export async function exists(target) {
   try {
@@ -138,12 +175,16 @@ export async function discoverSkills(root) {
   return found.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function copySkills(sourceRoot, targetRoot) {
+export async function copySkills(sourceRoot, targetRoot, { excludeNames = [] } = {}) {
   await assertNoSymlinks(sourceRoot);
   const skills = await discoverSkills(sourceRoot);
+  const excluded = new Set(excludeNames);
+  const missing = [...excluded].filter((name) => !skills.some((skill) => skill.name === name));
+  if (missing.length) throw new Error(`Excluded Skill not found: ${missing.join(', ')}`);
   await fs.mkdir(targetRoot, { recursive: true });
-  for (const skill of skills) await fs.cp(skill.directory, path.join(targetRoot, skill.name), { recursive: true, errorOnExist: true, force: false });
-  return skills.map(({ name }) => name);
+  const included = skills.filter((skill) => !excluded.has(skill.name));
+  for (const skill of included) await fs.cp(skill.directory, path.join(targetRoot, skill.name), { recursive: true, errorOnExist: true, force: false });
+  return included.map(({ name }) => name);
 }
 
 export async function hashTree(root) {

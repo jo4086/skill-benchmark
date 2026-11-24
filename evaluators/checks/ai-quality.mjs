@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { projectRoot } from '../bootstrap/common.mjs';
-import { hashEvaluationSnapshot } from './snapshot.mjs';
+import { projectRoot } from '../../bootstrap/environment/common.mjs';
+import { hashEvaluationSnapshot } from '../artifacts/snapshot.mjs';
 
 export const judgeConfig = Object.freeze({
   promptfooVersion: '0.126.0', sdkVersion: '0.167.0',

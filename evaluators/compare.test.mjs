@@ -96,6 +96,8 @@ test('sends saved runs to Promptfoo without assigning a quality score', async ()
 
 test('Promptfoo evaluates saved synthetic runs and writes its result', async () => {
   const outputRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-benchmark-promptfoo-'));
+  const previousCacheHome = process.env.XDG_CACHE_HOME;
+  process.env.XDG_CACHE_HOME = path.join(outputRoot, 'cache');
   try {
     const second = { ...run('b', 'codex-workspace'), status: 'failed', exitCode: 1 };
     const { comparison, outputDir } = await compareRuns([run('a', 'baseline'), second], { assess: async () => null, outputRoot });
@@ -105,6 +107,8 @@ test('Promptfoo evaluates saved synthetic runs and writes its result', async () 
     assert.equal(promptfoo.stats.successes, 1);
     assert.equal(promptfoo.stats.failures, 1);
   } finally {
+    if (previousCacheHome === undefined) delete process.env.XDG_CACHE_HOME;
+    else process.env.XDG_CACHE_HOME = previousCacheHome;
     await fs.rm(outputRoot, { recursive: true, force: true });
   }
 });

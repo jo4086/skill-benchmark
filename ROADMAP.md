@@ -9,8 +9,15 @@
 - [x] Promptfoo 비교와 저장된 결과의 객관·정적·AI 코드 품질 재평가를 분리했다. AI 평가기는 격리 홈과 읽기 전용 결과물 복사본을 사용한다.
 - [x] REST Countries 원본 ZIP을 현재 `tasks/FE-01`로 등록했다. 이전 FE-03 실행은 원본 해시가 일치할 때 새 FE-01 평가 기준을 적용한다. 이전 Browser extensions manager·FAQ 테스트 과제는 종료했다.
 - [x] FE-01의 외부 기능 8개·접근성 1개·기술 2개 평가기와 [기능 점검표](./evaluators/functional-review.md)를 작성했다. 실제 저장 결과의 판정은 [FE-01 검증 기록](./docs/REVIEW/REQ01/FE01/automatic-evaluation.md)에 남긴다.
-
 - [x] REQ03-Phase01 · [실행과 결과 보관](./docs/REQUIREMENTS/REQ03.md)을 구현했다. 저장 경로, 동시 할당, 재비교와 ZIP 복원을 [검증](./docs/REVIEW/REQ03/Phase01.md)했다.
+- [x] REQ03-Phase02 · [설치 환경과 평가기 캐시 분리](./docs/GOAL/REQ03/Phase02.md)를 구현했다. 기존 환경 이동과 새 경로를 [검증](./docs/REVIEW/REQ03/Phase02.md)했다.
+- [x] [REQ01 평가 보고서](./docs/GOAL/REQ01/README.md)를 평가 JSON과 함께 생성한다. 모의 평가와 저장된 FE-01 run-02로 검증했다.
+- [x] REQ03 설치 환경 개선 · [실행 전 codex-workspace 버전 선택](./docs/GOAL/REQ03/Phase02.md)을 구현하고 승인한 커밋이 재설치와 검증에 유지되는지 확인했다.
+- [x] REQ02 Runner 로그 표시 개선 · [ANSI 이벤트 색상](./docs/GOAL/REQ02/README.md)을 구현하고 TTY·`NO_COLOR` 출력을 검증했다.
+- [x] REQ01 Runner 기본 평가 · FE-01 실행 후 별도 활성화 옵션 없이 전체 품질 평가와 보고서를 생성하도록 하고 Runner 테스트와 dry-run으로 검증했다.
+- [x] REQ03-Phase03 · [실행 환경 출처 보존](./docs/GOAL/REQ03/Phase03.md)을 구현했다. 커밋·설치/제외 Skill·콘텐츠 해시를 시도 기록과 ZIP에 보존하는지 [검증](./docs/REVIEW/REQ03/Phase03.md)했다.
+
+- [x] 디렉터리 정리 · 기능별 하위 역할과 참조 경로를 정돈하고 빈 자리표시자·중복 ZIP·예전 로컬 `results/`를 삭제했다. 기존 테스트와 경로 검증 결과는 [완료 기준](./GOAL.md#디렉터리-정리-완료-기준)에 기록했다.
 
 ## 남은 검증
 

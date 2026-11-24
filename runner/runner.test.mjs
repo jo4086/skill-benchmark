@@ -4,11 +4,35 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { buildCodexArgs, parseArgs } from './index.mjs';
-import { collectSessionId, collectUsage } from './usage.mjs';
-import { runTrial } from './trial.mjs';
-import { collectSelfValidation } from './self-validation.mjs';
+import { collectSessionId, collectUsage } from './execution/usage.mjs';
+import { runTrial } from './execution/trial.mjs';
+import { collectSelfValidation } from './execution/self-validation.mjs';
+import { formatEvents, supportsColor, withColorizedOutput } from './execution/terminal.mjs';
 
 const args = ['--task-id', 'sample', '--prompt-file', 'prompt.md', '--fixture-dir', 'fixture', '--environments', 'baseline,codex-workspace'];
+
+test('terminal events color only event keywords in supported terminals', () => {
+  const stream = { isTTY: true };
+  const environment = {};
+  const formatted = formatEvents('START task\nResult: /tmp/result\nFAILED run\nWARNING retry', { stream, environment });
+  assert.equal(formatted, '\u001B[1;34mSTART\u001B[0m task\n\u001B[1;92mResult\u001B[0m: /tmp/result\n\u001B[1;31mFAILED\u001B[0m run\n\u001B[1;33mWARNING\u001B[0m retry');
+  assert.equal(formatEvents('COMPLETED result', { stream: { isTTY: false }, environment }), 'COMPLETED result');
+  assert.equal(formatEvents('ERROR result', { stream, environment: { NO_COLOR: '' } }), 'ERROR result');
+  assert.equal(supportsColor(stream, environment), true);
+  assert.equal(supportsColor({ isTTY: false }, environment), false);
+  assert.equal(supportsColor(stream, { TERM: 'dumb' }), false);
+});
+
+test('terminal output wrapper restores the stream after evaluator output', async () => {
+  let output = '';
+  const stream = { isTTY: true, write(chunk) { output += chunk; return true; } };
+  await withColorizedOutput(async () => {
+    stream.write('Starting evaluation\n');
+    stream.write('Running 2 test cases\n');
+  }, stream, {});
+  stream.write('COMPLETED outside wrapper');
+  assert.equal(output, '\u001B[1;34mStarting\u001B[0m evaluation\n\u001B[1;34mRunning\u001B[0m 2 test cases\nCOMPLETED outside wrapper');
+});
 
 test('runner limits invocation size and rejects duplicate environments', () => {
   assert.equal(parseArgs(args).model, 'gpt-6.2-sol');
@@ -17,9 +41,11 @@ test('runner limits invocation size and rejects duplicate environments', () => {
   assert.throws(() => parseArgs(['--task', 'tasks/FE-01', ...args]), /cannot be combined/);
   assert.throws(() => parseArgs([...args, '--repeats', '2']), /Maximum three runs/);
   assert.throws(() => parseArgs([...args.slice(0, -1), 'baseline,baseline']), /unique/);
+  assert.equal(parseArgs(['--task', 'tasks/FE-01', '--environments', 'baseline']).evaluateQuality, true);
   assert.equal(parseArgs(['--task', 'tasks/FE-01', '--environments', 'baseline', '--evaluate-quality']).evaluateQuality, true);
   assert.throws(() => parseArgs([...args, '--evaluate-quality']), /requires --task/);
-  assert.throws(() => parseArgs([...args, '--judge-home', '/tmp/judge']), /requires --evaluate-quality/);
+  assert.throws(() => parseArgs([...args, '--judge-home', '/tmp/judge']), /requires --task/);
+  assert.equal(parseArgs(['--task', 'tasks/FE-01', '--environments', 'baseline', '--judge-home', '/tmp/judge']).judgeHome, '/tmp/judge');
 });
 
 test('usage sums completed turns and preserves missing measurements', async () => {

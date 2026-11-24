@@ -5,8 +5,8 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { run } from '../bootstrap/common.mjs';
-import { discoverCatalog, discoverRegistered, filterCatalog, registerTasks, repository } from './catalog.mjs';
+import { run } from '../bootstrap/environment/common.mjs';
+import { discoverCatalog, discoverRegistered, filterCatalog, registerTasks, repository } from './management/catalog.mjs';
 
 const tasksRoot = path.dirname(fileURLToPath(import.meta.url));
 const usage = `Usage: pnpm run tasks -- <search|register> [options]

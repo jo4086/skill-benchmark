@@ -46,3 +46,10 @@ environments/*/.codex/
 
 # Logs
 *.log
+
+# Local analysis utilities
+/scripts/normalize-analysis-paths.mjs
+
+# Test
+/test/
+/docs/analyses/test.md

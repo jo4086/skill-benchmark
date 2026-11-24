@@ -4,14 +4,14 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { readJson, run } from '../bootstrap/common.mjs';
-import { executePlan } from './index.mjs';
+import { readJson, run } from '../../bootstrap/environment/common.mjs';
+import { executePlan } from '../index.mjs';
 import { readResultRuns } from './result.mjs';
 import { createRunDirectories, restoreSnapshot } from './storage.mjs';
 
 test('allocates run numbers and stores a comparison with restorable worktrees', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-benchmark-storage-test-'));
-  const before = { TMPDIR: process.env.TMPDIR, XDG_STATE_HOME: process.env.XDG_STATE_HOME, PATH: process.env.PATH,
+  const before = { TMPDIR: process.env.TMPDIR, XDG_STATE_HOME: process.env.XDG_STATE_HOME, XDG_CACHE_HOME: process.env.XDG_CACHE_HOME, PATH: process.env.PATH,
     PROMPTFOO_CONFIG_DIR: process.env.PROMPTFOO_CONFIG_DIR, PROMPTFOO_DISABLE_TELEMETRY: process.env.PROMPTFOO_DISABLE_TELEMETRY,
     PROMPTFOO_DISABLE_UPDATE: process.env.PROMPTFOO_DISABLE_UPDATE };
   t.after(async () => {
@@ -23,6 +23,7 @@ test('allocates run numbers and stores a comparison with restorable worktrees', 
   });
   process.env.TMPDIR = path.join(root, 'tmp');
   process.env.XDG_STATE_HOME = path.join(root, 'state');
+  process.env.XDG_CACHE_HOME = path.join(root, 'cache');
   const stateDir = path.join(process.env.XDG_STATE_HOME, 'skill-benchmark');
   const workRoot = path.join(process.env.TMPDIR, 'skill-benchmark');
   const reservations = await Promise.all([
@@ -54,7 +55,18 @@ printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":3,"output_token
     const codexHome = path.join(home, '.codex');
     await fs.mkdir(codexHome, { recursive: true });
     if (id === 'codex-workspace') await fs.writeFile(path.join(codexHome, 'AGENTS.md'), '# Environment instructions\n');
-    return { repetition: 1, environment: { id, home, codexHome, xdgConfigHome: path.join(home, '.config') } };
+    const manifest = {
+      schemaVersion: 1, id, source: id === 'codex-workspace'
+        ? { kind: 'git', repository: 'https://example.invalid/codex-workspace.git', commit: 'a'.repeat(40), skillsPath: 'skills' }
+        : { kind: 'baseline' },
+      sourceCommit: id === 'codex-workspace' ? 'a'.repeat(40) : null,
+      sourceDirty: false,
+      skillNames: id === 'codex-workspace' ? ['skill-router'] : [],
+      commonSkillNames: [], excludedSkillNames: id === 'codex-workspace' ? ['code-style'] : [],
+      contentHash: `${id}-content`, codexVersion: 'mock-version', installedAt: '2026-01-01T00:00:00.000Z',
+    };
+    return { repetition: 1, environment: { id, home, codexHome, xdgConfigHome: path.join(home, '.config'),
+      source: manifest.source, contentHash: manifest.contentHash, manifest } };
   }));
   const prompt = 'Create a fixture.';
   const promptFile = path.join(root, 'prompt.md');
@@ -72,7 +84,10 @@ printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":3,"output_token
     path.join(workRoot, 'smoke-run-01', id)));
   assert.deepEqual(result.snapshots.map((entry) => entry.file),
     ['snapshots/baseline.zip', 'snapshots/codex-workspace.zip']);
+  assert.equal(result.snapshots[1].sourceCommit, 'a'.repeat(40));
+  assert.deepEqual(result.snapshots[1].excludedSkillNames, ['code-style']);
   assert.deepEqual(result.comparisons, ['comparisons/final/comparison.json']);
+  assert.ok((await fs.stat(path.join(root, 'cache/skill-benchmark/promptfoo'))).isDirectory());
   assert.match(await fs.readFile(path.join(outputDir, 'comparisons/final/summary.md'), 'utf8'),
     /\.\.\/\.\.\/attempts\/baseline\/attempt-01\/run\.json/);
   assert.match(await fs.readFile(path.join(outputDir, 'user-checklist.md'), 'utf8'), /restore -- smoke run-01 baseline/);
@@ -82,6 +97,12 @@ printf '%s\\n' '{"type":"turn.completed","usage":{"input_tokens":3,"output_token
 
   const archive = path.join(outputDir, result.snapshots[1].file);
   assert.equal(await run('unzip', ['-p', archive, 'environment/AGENTS.md']), '# Environment instructions');
+  const archivedManifest = JSON.parse(await run('unzip', ['-p', archive, 'environment/manifest.json']));
+  assert.equal(archivedManifest.sourceCommit, 'a'.repeat(40));
+  assert.deepEqual(archivedManifest.skillNames, ['skill-router']);
+  assert.deepEqual(archivedManifest.excludedSkillNames, ['code-style']);
+  const runRecord = await readJson(path.join(outputDir, result.runs.find((entry) => entry.environmentId === 'codex-workspace').record));
+  assert.deepEqual(runRecord.environmentManifest, archivedManifest);
   await fs.rm(result.workDir, { recursive: true });
   await run('pnpm', ['run', 'compare', '--', '--result', resultFile]);
   assert.ok((await fs.readdir(path.join(outputDir, 'comparisons', 'rechecks'))).includes('INDEX.md'));

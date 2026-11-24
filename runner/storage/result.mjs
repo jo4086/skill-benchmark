@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { projectRoot, readJson, writeJsonAtomic } from '../bootstrap/common.mjs';
+import { projectRoot, readJson, writeJsonAtomic } from '../../bootstrap/environment/common.mjs';
 import { archiveWorktree } from './storage.mjs';
 
 export function environmentDirectory(options, environmentId, repetition) {
@@ -31,9 +31,15 @@ export async function createUserChecklist(options, result) {
 export async function snapshotFinalAttempt(options, result, run, instructions) {
   const name = `${environmentDirectory(options, run.environmentId, run.repetition).replaceAll(path.sep, '-')}.zip`;
   const file = path.join('snapshots', name);
-  const entry = { environmentId: run.environmentId, repetition: run.repetition, attemptNumber: run.attemptNumber };
+  const provenance = {
+    sourceCommit: run.environmentManifest?.sourceCommit ?? run.environmentSource?.commit ?? null,
+    skillNames: run.environmentManifest?.skillNames ?? [],
+    excludedSkillNames: run.environmentManifest?.excludedSkillNames ?? [],
+    contentHash: run.environmentManifest?.contentHash ?? run.environmentContentHash,
+  };
+  const entry = { environmentId: run.environmentId, repetition: run.repetition, attemptNumber: run.attemptNumber, ...provenance };
   try {
-    const sha256 = await archiveWorktree(run.workDir, path.join(result.outputDir, file), instructions);
+    const sha256 = await archiveWorktree(run.workDir, path.join(result.outputDir, file), instructions, run.environmentManifest);
     return { ...entry, file, sha256 };
   } catch (error) {
     return { ...entry, error: error.message };

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { assertNoSymlinks, exists, hashTree, readJson, writeJsonAtomic } from '../bootstrap/common.mjs';
+import { assertNoSymlinks, exists, hashTree, readJson, writeJsonAtomic } from '../../bootstrap/environment/common.mjs';
 
 export const repository = 'https://github.com/frontendwizards/frontend-challenges.git';
 

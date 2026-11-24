@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { discoverCatalog, discoverRegistered, filterCatalog, registerTasks } from './catalog.mjs';
-import { prepareTask } from './package.mjs';
+import { discoverCatalog, discoverRegistered, filterCatalog, registerTasks } from './management/catalog.mjs';
+import { prepareTask } from './management/package.mjs';
 
 const tasksRoot = path.dirname(fileURLToPath(import.meta.url));
 

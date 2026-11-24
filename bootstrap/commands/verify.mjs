@@ -2,9 +2,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
-  environmentPaths, environmentsRoot, exists, hashTree, indexPath, projectRoot,
-  readJson, run, validateSources,
-} from './common.mjs';
+  environmentPaths, environmentsRoot, exists, hashTree, indexPath, legacyEnvironmentsRoot, projectRoot,
+  readJson, run, validateSources, workspaceDefault,
+} from '../environment/common.mjs';
 
 function verifySource(id, source, sources) {
   if (id === 'baseline') {
@@ -46,6 +46,13 @@ async function verifyEnvironment(entry, sources, codexVersion) {
   }
   const names = (await fs.readdir(path.join(root, '.agents', 'skills'))).sort();
   if (JSON.stringify(names) !== JSON.stringify([...manifest.skillNames].sort())) throw new Error(`${id}: skill inventory mismatch`);
+  const excludedSkillNames = manifest.excludedSkillNames ?? [];
+  if (!Array.isArray(excludedSkillNames) || new Set(excludedSkillNames).size !== excludedSkillNames.length
+    || excludedSkillNames.some((name) => !/^[a-z0-9][a-z0-9-]*$/.test(name) || names.includes(name))) {
+    throw new Error(`${id}: invalid excluded Skill inventory`);
+  }
+  const sourceCommit = manifest.sourceCommit ?? manifest.source?.commit ?? null;
+  if (sourceCommit !== null && !/^[0-9a-f]{40}$/.test(sourceCommit)) throw new Error(`${id}: invalid source commit`);
   for (const name of names) {
     if (!(await exists(path.join(root, '.agents', 'skills', name, 'SKILL.md')))) throw new Error(`${id}: missing SKILL.md for ${name}`);
   }
@@ -67,10 +74,15 @@ async function verifyEnvironment(entry, sources, codexVersion) {
 
 async function main() {
   if (process.argv.length !== 2) throw new Error('Usage: pnpm verify');
+  if (!(await exists(indexPath)) && await exists(legacyEnvironmentsRoot)) {
+    throw new Error('Existing project-local environments found. Run pnpm run environments:migrate first.');
+  }
+  if (!(await fs.lstat(environmentsRoot)).isDirectory()) throw new Error('Environments path must be a directory');
   if ((await fs.lstat(indexPath)).isSymbolicLink()) throw new Error('Environment index is a symlink');
   const index = await readJson(indexPath);
   if (index.schemaVersion !== 1 || !Array.isArray(index.environments)) throw new Error('Invalid environment index');
   const sources = validateSources(await readJson(path.join(projectRoot, 'bootstrap', 'sources.json')));
+  sources.workspace = workspaceDefault(sources, index);
   const currentCodexVersion = await run('codex', ['--version']);
   if (currentCodexVersion !== index.codexVersion) throw new Error(`Codex version changed: installed ${index.codexVersion}, current ${currentCodexVersion}`);
   const ids = index.environments.map((entry) => entry.id);

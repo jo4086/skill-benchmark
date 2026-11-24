@@ -2,6 +2,16 @@
 
 Bootstrap은 Runner가 사용할 환경을 구성한다. [루트 README](../README.md)의 비교 원칙과 [아키텍처](../ARCHITECTURE.md)를 따른다. 이 구현은 Skill 디렉터리를 Codex가 찾는 `.agents/skills/`에 복사한다. 공개 저장소의 공식 플러그인 설치 프로그램을 실행하거나 외부 명령을 Skill 내용에 맞게 변환하지 않는다.
 
+
+설치 환경 기본 경로는 `~/.local/share/skill-benchmark/environments/`다. 절대 경로인 `XDG_DATA_HOME`을 설정하면 그 아래 `skill-benchmark/environments/`를 사용한다. 설정과 인증은 이 경로에 보존하고 작업 디렉터리는 Runner와 수동 실행이 임시 경로에 만든다.
+
+이전 버전의 저장소에 `environments/`가 있으면 해당 환경의 실행을 종료한 다음 아래 명령으로 이동한다. 이동은 같은 파일 시스템에서 디렉터리 이름을 바꾸며, 인증 파일과 환경 설정을 그대로 보존한다. 기존 목적지는 덮어쓰지 않는다.
+
+```sh
+pnpm run environments:migrate
+pnpm verify
+```
+
 ## 명령
 
 ```sh
@@ -9,6 +19,7 @@ pnpm run setup --list
 pnpm run setup --public none
 pnpm run setup --public superpowers,anthropics-skills
 pnpm run setup --public mattpocock-skills --local-workspace /path/to/codex-workspace
+pnpm run setup --public none --exclude-workspace-skills code-style
 pnpm run setup --public none --copy-auth
 pnpm run auth:copy  # 이미 설치한 환경에 인증 파일만 복사
 pnpm verify
@@ -17,6 +28,8 @@ pnpm verify
 `pnpm run setup`만 실행하면 공개 모음 선택을 묻는다. 비대화형 셸에서는 `--public`을 명시해야 한다. Baseline과 codex-workspace는 항상 포함된다. `pnpm setup`은 pnpm 자체 명령이므로 사용하지 않는다.
 
 `--common-skills-dir /path/to/skills`는 명시한 로컬 Skill 모음을 **모든** 비교군에 동일하게 복사한다. 기본값은 빈 모음이다. Codex 자체 제공 Skill은 별도 복사하지 않는다. 이 옵션을 사용하면 설치 원본 경로와 내용 해시가 환경 기록에 남는다. 같은 이름의 Skill이 다른 원본에도 있으면 설치를 중단한다.
+
+`--exclude-workspace-skills name[,name]`은 codex-workspace 설치에서 지정한 Skill을 제외하고 그 의도를 `environment.json`의 `excludedSkillNames`에 기록한다. 존재하지 않는 Skill, 중복 이름과 안전하지 않은 이름은 거부한다. 제외 없는 설치는 빈 배열을 기록한다.
 
 기존 `environments/<id>/`에 Bootstrap 기록이 없거나 내용이 달라진 경우, 대화형 실행은 충돌한 환경을 모두 보여 주고 보관 여부를 묻는다. 거절하면 기존 환경을 변경하지 않고 종료한다. 비대화형 실행은 중단하며, 내용을 확인한 뒤 `--archive-existing`을 명시해야 한다. 보관에 동의한 기존 환경은 `environments/.backups/`로 이동하고 자동 삭제되지 않는다. Bootstrap은 Skill을 실제로 호출하거나 Hook을 실행하지 않는다.
 
@@ -36,6 +49,6 @@ codex-workspace에는 `templates/global-AGENTS.md`를 환경의 `.agents/AGENTS.
 
 ## Runner에 제공하는 정보
 
-설치된 각 환경의 `environment.json`과 `environments/index.json`은 `schemaVersion: 1`을 사용한다. 인덱스에는 환경 식별자, 저장소 루트 기준 상대 `home`·`codexHome`·`xdgConfigHome`, 원본, 환경 기록 경로가 있다. 환경 기록에는 Skill 이름 목록, 원본 URL과 커밋 또는 로컬 경로, 공통 Skill 출처, 설치 당시 Codex 버전, `.agents` 내용 해시가 있다. Runner는 이 정보만 읽고 설치를 수행하지 않도록 설계한다.
+설치된 각 환경의 `environment.json`과 `environments/index.json`은 `schemaVersion: 1`을 사용한다. 인덱스에는 환경 식별자, 사용자 데이터 경로의 `skill-benchmark/` 기준 상대 `home`·`codexHome`·`xdgConfigHome`, 원본, 환경 기록 경로가 있다. 환경 기록에는 원본 커밋 또는 확인 불가를 뜻하는 `null`, 로컬 Git 수정 여부, 설치·제외·공통 Skill 목록, 설치 당시 Codex 버전과 `.agents` 내용 해시가 있다. Runner는 이 정보만 읽고 설치를 수행하지 않도록 설계한다.
 
-`pnpm verify`는 인덱스와 환경 기록의 일치, 필수 환경, 현재 `sources.json`의 고정 커밋, 설치 당시와 현재의 Codex 버전, 디렉터리·Skill 목록·내용 해시, codex-workspace의 지침 연결을 검사한다. 인증 상태와 Codex가 Skill 또는 Hook을 실제로 사용했는지는 검사하지 않는다. `environments/` 전체와 그 백업은 Git에서 제외된다.
+`pnpm verify`는 인덱스와 환경 기록의 일치, 필수 환경, `sources.json`의 고정 커밋(codex-workspace는 사용자가 선택한 기본 커밋 우선), 설치 당시와 현재의 Codex 버전, 디렉터리·Skill 목록·내용 해시, codex-workspace의 지침 연결을 검사한다. 인증 상태와 Codex가 Skill 또는 Hook을 실제로 사용했는지는 검사하지 않는다. 설치 환경과 그 백업은 사용자 데이터 경로에 둔다.

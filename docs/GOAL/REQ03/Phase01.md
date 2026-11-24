@@ -1,6 +1,6 @@
-# REQ03 · 실행과 결과 보관
+# REQ03-Phase01 · 실행과 결과 보관
 
-[요구사항](../docs/REQUIREMENTS/REQ03.md) · [로드맵](../ROADMAP.md) · [검증 기록](../docs/REVIEW/REQ03/Phase01.md)
+[요구사항](../../REQUIREMENTS/REQ03.md) · [로드맵](../../../ROADMAP.md) · [검증 기록](../../REVIEW/REQ03/Phase01.md)
 
 - [x] 비교 환경의 작업 경로를 임시 실행 번호 아래에서 찾을 수 있고, 동시에 실행해도 같은 과제의 번호가 겹치지 않는다.
 - [x] 결과·평가·체크리스트와 반복·피드백 기록을 과제와 실행 번호로 찾을 수 있다.

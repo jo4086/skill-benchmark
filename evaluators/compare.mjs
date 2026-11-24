@@ -1,16 +1,15 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { projectRoot, readJson, writeJsonAtomic } from '../bootstrap/common.mjs';
-import { countriesEvaluatorVersion } from './countries.mjs';
-import { evaluateTaskRun } from './task.mjs';
-import { copyEvaluationSnapshot } from './snapshot.mjs';
-import { writeComparisonReports } from './report.mjs';
-import { readResultRuns } from '../runner/result.mjs';
-import { stateDirectory, taskResultsDirectory } from '../runner/storage.mjs';
+import { environmentsRoot, readJson, userDirectory, writeJsonAtomic } from '../bootstrap/environment/common.mjs';
+import { countriesEvaluatorVersion } from './checks/countries.mjs';
+import { evaluateTaskRun } from './checks/task.mjs';
+import { copyEvaluationSnapshot } from './artifacts/snapshot.mjs';
+import { writeComparisonReports } from './reports/report.mjs';
+import { readResultRuns } from '../runner/storage/result.mjs';
+import { taskResultsDirectory, temporaryWorkDirectory } from '../runner/storage/storage.mjs';
 
 const help = 'Usage: pnpm run compare -- --result PATH/result.json | --runs FIRST/run.json SECOND/run.json [more files]';
 
@@ -40,7 +39,7 @@ export function validateRuns(runs) {
 async function registeredSkills(run) {
   if (!run.environmentContentHash || !/^[a-z0-9-]+$/.test(run.environmentId)) return { status: 'unknown' };
   try {
-    const manifest = await readJson(path.join(projectRoot, 'environments', run.environmentId, 'environment.json'));
+    const manifest = await readJson(path.join(environmentsRoot, run.environmentId, 'environment.json'));
     if (manifest.contentHash !== run.environmentContentHash || !Array.isArray(manifest.skillNames)) return { status: 'unknown' };
     return { status: 'known', names: [...new Set([...manifest.skillNames, ...(manifest.commonSkillNames ?? [])])].sort(), environmentContentHash: manifest.contentHash };
   } catch { return { status: 'unknown' }; }
@@ -101,7 +100,7 @@ export async function compareRuns(runs, { evaluate, assess = evaluateTaskRun, ou
     if (assess === evaluateTaskRun && ['FE-01', 'FE-03'].includes(run.taskId)) {
       const source = run.artifact?.directory ?? run.workDir;
       if (!source || !path.isAbsolute(source)) throw new Error(`Saved source unavailable: ${run.id}`);
-      const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-benchmark-compare-'));
+      const temporaryRoot = await temporaryWorkDirectory('compare');
       try {
         const workDir = path.join(temporaryRoot, 'source');
         const hash = await copyEvaluationSnapshot(source, workDir);
@@ -147,7 +146,7 @@ export async function compareRuns(runs, { evaluate, assess = evaluateTaskRun, ou
     }))],
   };
   if (!evaluate) {
-    process.env.PROMPTFOO_CONFIG_DIR = path.join(outputRoot ?? stateDirectory(), '.promptfoo');
+    process.env.PROMPTFOO_CONFIG_DIR = path.join(userDirectory('XDG_CACHE_HOME', '.cache'), 'promptfoo');
     process.env.PROMPTFOO_DISABLE_TELEMETRY = '1';
     process.env.PROMPTFOO_DISABLE_UPDATE = '1';
     await fs.mkdir(process.env.PROMPTFOO_CONFIG_DIR, { recursive: true });

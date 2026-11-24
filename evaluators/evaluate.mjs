@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readJson, writeJsonAtomic } from '../bootstrap/common.mjs';
-import { evaluateTaskRun } from './task.mjs';
-import { evaluateStatic } from './static.mjs';
-import { codeRubricSha256, evaluateAiCodeQuality, judgeConfig } from './ai-quality.mjs';
-import { gradeFullQuality } from './full-quality.mjs';
-import { copyEvaluationSnapshot, hashEvaluationSnapshot } from './snapshot.mjs';
-import { countriesSourceSha256, restoreCountriesReference } from './countries.mjs';
-import { readResultRuns } from '../runner/result.mjs';
-import { taskResultsDirectory } from '../runner/storage.mjs';
+import { readJson, writeJsonAtomic } from '../bootstrap/environment/common.mjs';
+import { evaluateTaskRun } from './checks/task.mjs';
+import { evaluateStatic } from './checks/static.mjs';
+import { codeRubricSha256, evaluateAiCodeQuality, judgeConfig } from './checks/ai-quality.mjs';
+import { gradeFullQuality } from './scoring/full-quality.mjs';
+import { writeQualityReport } from './reports/quality-report.mjs';
+import { copyEvaluationSnapshot, hashEvaluationSnapshot } from './artifacts/snapshot.mjs';
+import { countriesSourceSha256, restoreCountriesReference } from './checks/countries.mjs';
+import { readResultRuns } from '../runner/storage/result.mjs';
+import { taskResultsDirectory, temporaryWorkDirectory } from '../runner/storage/storage.mjs';
 
 const help = 'Usage: pnpm run evaluate -- (--result PATH/result.json | --runs PATH/run.json [more files]) [--judge-home /absolute/path | --skip-ai]';
 
@@ -36,7 +36,7 @@ export async function reevaluateRuns(runs, { judgeHome, skipAi = false, assess =
       || run.taskSource?.sha256 !== countriesSourceSha256) throw new Error('Unsupported saved run');
     const source = run.artifact?.directory ?? run.workDir;
     if (!source || !path.isAbsolute(source)) throw new Error(`Saved source unavailable: ${run.id}`);
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'skill-benchmark-regrade-'));
+    const root = await temporaryWorkDirectory('regrade');
     try {
       const evaluationDir = path.join(root, 'checks');
       const judgeDir = path.join(root, 'judge');
@@ -61,7 +61,8 @@ export async function reevaluateRuns(runs, { judgeHome, skipAi = false, assess =
       if (judgeSourceSha256 !== await hashEvaluationSnapshot(judgeDir)) throw new Error(`Judge source changed: ${run.id}`);
       const quality = gradeFullQuality(run.taskId, assessment, staticResult, aiResult);
       entries.push({ runId: run.id, taskId: run.taskId, environmentId: run.environmentId,
-        attemptNumber: run.attemptNumber, sourceSha256, implementationUsage: run.usage,
+        repetition: run.repetition, attemptNumber: run.attemptNumber, durationMs: run.durationMs,
+        sourceSha256, implementationUsage: run.usage,
         evaluatorUsage: aiResult.tokenUsage, objective: assessment, static: staticResult,
         aiCode: aiResult, quality });
     } finally { await fs.rm(root, { recursive: true, force: true }); }
@@ -81,7 +82,8 @@ export async function reevaluateRuns(runs, { judgeHome, skipAi = false, assess =
       },
     } };
   await writeJsonAtomic(path.join(outputDir, 'evaluation.json'), record);
-  return { record, outputDir };
+  const reportFile = await writeQualityReport(record, outputDir);
+  return { record, outputDir, reportFile };
 }
 
 async function main() {
@@ -106,8 +108,9 @@ async function main() {
   const group = mode === '--result' ? await readResultRuns(paths[0]) : null;
   const runs = group?.runs ?? await Promise.all(paths.map((file) => readJson(path.resolve(file))));
   const outputRoot = group ? path.join(group.directory, 'quality', 'rechecks') : undefined;
-  const { record, outputDir } = await reevaluateRuns(runs, { judgeHome, skipAi, outputRoot });
+  const { record, outputDir, reportFile } = await reevaluateRuns(runs, { judgeHome, skipAi, outputRoot });
   console.log(`Evaluated ${record.entries.length} saved run(s): ${outputDir}`);
+  console.log(`Quality report: ${reportFile}`);
   for (const entry of record.entries) console.log(`${entry.environmentId} ${entry.runId}: score ${entry.quality.score ?? 'incomplete'}; pass ${entry.quality.passed}`);
   if (record.entries.some((entry) => entry.aiCode.status === 'error')) process.exitCode = 1;
 }
